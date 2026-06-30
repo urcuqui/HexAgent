@@ -134,6 +134,7 @@ pre-configured for the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)
 | `OPENAI_BASE_URL` | `https://ai-gateway.vercel.sh/v1` | OpenAI-compatible base URL (override for other hosts). |
 | `HEXAGENT_MODEL` | `openai/gpt-4o-mini` | Model id in `provider/model` format (e.g. `anthropic/claude-sonnet-4.6`). |
 | `HEXAGENT_MOCK_MODE` | `false` | Force offline determinism. |
+| `HEXAGENT_ENABLE_NMAP` | `false` | Register the real `nmap_scan` tool (shells out to a local `nmap` binary). Only enable against explicitly authorised targets. |
 | `HEXAGENT_MAX_ITERATIONS` | `12` | Iteration budget before halting. |
 | `HEXAGENT_REQUIRE_HUMAN_APPROVAL` | `false` | Pause for human review before the report. |
 | `HEXAGENT_LOG_LEVEL` | `INFO` | Logging level. |
@@ -152,6 +153,16 @@ uv run hexagent --objective "Recon the lab box" --target demo.thm.local --mock -
 # Cap iterations and require a human approval checkpoint
 uv run hexagent -o "Map the attack surface" -t example.thm --max-iterations 6 --human-approval
 ```
+
+> **macOS troubleshooting:** if `uv run hexagent` raises
+> `ModuleNotFoundError: No module named 'app'`, some `uv` versions write the
+> editable-install `.pth` file with the macOS hidden flag set, which
+> Python 3.12+'s `site.py` silently skips. Run via the module instead — it
+> isn't affected by that `.pth`:
+>
+> ```bash
+> uv run python -m app.cli --objective "Recon the lab box" --target demo.thm.local --mock --print
+> ```
 
 Reports are written to `reports/` unless `--no-save` is passed.
 
@@ -217,10 +228,47 @@ uv run ruff format .     # format
 
 ---
 
+## Limitations
+
+This is a proof-of-concept, not a production pentesting tool. Known boundaries:
+
+- **Mock-by-default tooling.** All eight built-in tools return deterministic,
+  simulated data derived from a per-target fixture profile — no real HTTP
+  requests, port scans, crawling or fingerprinting occur. `nmap_scan` is the
+  only real, network-touching tool, and it is opt-in (`HEXAGENT_ENABLE_NMAP`),
+  off by default.
+- **No exploitation capability.** There is no payload delivery, credential
+  testing, injection, or post-exploitation logic of any kind — by design.
+- **No authenticated/session-aware testing.** Tools operate statelessly per
+  call; there's no cookie jar, login flow, or multi-step session handling.
+- **Single target, single run.** No multi-host campaigns, asset inventory, or
+  cross-run scope management; each invocation assesses one target in isolation.
+- **No persistence across runs.** `AgentState` lives in memory for the
+  duration of one `run_workflow()` call; there's no checkpointing, resumption,
+  or run history (the `report_dir` only stores the rendered markdown).
+- **Heuristic planning is fixed, LLM planning is best-effort.** Offline, the
+  planner always emits the same canonical recon recipe. With an LLM, planning
+  and tool selection can fail or hallucinate; failures fall back to the
+  heuristic path silently, which is good for robustness but means an LLM-driven
+  run's "reasoning" isn't guaranteed to differ from the offline default.
+- **Replanning is narrow.** The only built-in replan trigger is "robots.txt
+  revealed an interesting path"; it does not generalise to arbitrary
+  evaluator-driven strategy changes.
+- **Findings are illustrative, not a vulnerability scanner.** Severity grading
+  (e.g. the security-headers letter grade) is a simple heuristic for teaching
+  purposes, not a calibrated risk assessment, and isn't mapped to any
+  standard (OWASP, CVSS, PTES).
+- **No rate limiting or scope enforcement on real tools.** `nmap_scan`
+  validates input against command-injection but does not restrict *which*
+  hosts it may target (e.g. to a private-IP allowlist) — authorisation is the
+  operator's responsibility, not something the code enforces.
+
 ## Further reading
 
 See [`docs/architecture.md`](docs/architecture.md) for a deeper component
-breakdown and design rationale.
+breakdown and design rationale, and
+[`docs/training-use-case.md`](docs/training-use-case.md) for how this POC maps
+to a professional training module and a suggested team walkthrough agenda.
 
 ## Disclaimer
 

@@ -56,8 +56,15 @@ class ToolRegistry:
         return tool.run(**kwargs)
 
 
-def default_registry() -> ToolRegistry:
-    """Build a registry pre-populated with all built-in mock tools."""
+def default_registry(enable_nmap: bool = False) -> ToolRegistry:
+    """Build a registry pre-populated with all built-in mock tools.
+
+    Args:
+        enable_nmap: When ``True``, also register :class:`NmapScanTool`, which
+            shells out to a real ``nmap`` binary. Off by default so the
+            standard registry stays fully mock/offline; wire it to
+            ``Settings.enable_nmap`` to opt in.
+    """
     # Imported here to avoid a circular import at module load time.
     from app.tools.http_tools import (
         HeaderInspectionTool,
@@ -72,15 +79,18 @@ def default_registry() -> ToolRegistry:
         TechFingerprintTool,
     )
 
-    return ToolRegistry(
-        [
-            HttpGetTool(),
-            HttpPostTool(),
-            HeaderInspectionTool(),
-            RobotsTxtTool(),
-            SecurityHeadersTool(),
-            TechFingerprintTool(),
-            PortScanTool(),
-            CrawlerTool(),
-        ]
-    )
+    tools: list[BaseTool] = [
+        HttpGetTool(),
+        HttpPostTool(),
+        HeaderInspectionTool(),
+        RobotsTxtTool(),
+        SecurityHeadersTool(),
+        TechFingerprintTool(),
+        PortScanTool(),
+        CrawlerTool(),
+    ]
+    if enable_nmap:
+        from app.tools.nmap_tool import NmapScanTool
+
+        tools.append(NmapScanTool())
+    return ToolRegistry(tools)

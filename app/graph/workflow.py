@@ -64,7 +64,7 @@ def build_nodes(
 ) -> WorkflowNodes:
     """Create the agent node bundle, wiring in an LLM when configured."""
     settings = settings or get_settings()
-    registry = registry or default_registry()
+    registry = registry or default_registry(enable_nmap=settings.enable_nmap)
     llm = build_llm(settings)
     return WorkflowNodes(
         planner=PlannerAgent(registry, llm),

@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     temperature: float = Field(default=0.1, alias="HEXAGENT_TEMPERATURE")
     mock_mode: bool = Field(default=False, alias="HEXAGENT_MOCK_MODE")
 
+    # Real tools (off by default; only use against explicitly authorised targets).
+    enable_nmap: bool = Field(default=False, alias="HEXAGENT_ENABLE_NMAP")
+
     # Agent behaviour
     max_iterations: int = Field(default=12, alias="HEXAGENT_MAX_ITERATIONS")
     require_human_approval: bool = Field(default=False, alias="HEXAGENT_REQUIRE_HUMAN_APPROVAL")
