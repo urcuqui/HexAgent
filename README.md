@@ -266,9 +266,7 @@ This is a proof-of-concept, not a production pentesting tool. Known boundaries:
 ## Further reading
 
 See [`docs/architecture.md`](docs/architecture.md) for a deeper component
-breakdown and design rationale, and
-[`docs/training-use-case.md`](docs/training-use-case.md) for how this POC maps
-to a professional training module and a suggested team walkthrough agenda.
+breakdown and design rationale.
 
 ## Disclaimer
 
