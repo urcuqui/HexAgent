@@ -8,7 +8,7 @@ tools, evaluates results, replans when needed, and produces a markdown report.
 
 > ⚠️ **Educational use only.** Every tool is a **deterministic mock** — HexAgent
 > performs **no real network activity and no exploitation**. It is designed as a
-> foundation for learning (e.g. TryHackMe-style content) and for safely extending
+> foundation for learning and for safely extending
 > toward real, *authorised* tooling later. Only ever target systems you own or are
 > explicitly permitted to test.
 
