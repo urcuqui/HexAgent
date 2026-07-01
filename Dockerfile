@@ -39,11 +39,11 @@ FROM base AS builder
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --extra dev
+    uv sync --frozen --no-install-project --extra dev --extra web
 
 COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --extra dev
+    uv sync --frozen --extra dev --extra web
 
 # --------------------------------------------------------------------------- #
 # Test: run linting and the unit test suite. If anything fails the whole image
@@ -61,6 +61,14 @@ RUN uv run ruff check . \
 # --------------------------------------------------------------------------- #
 FROM base AS runtime
 ENV PATH="/app/.venv/bin:$PATH"
+
+# nmap is a system binary, not a Python dependency: NmapScanTool shells out to
+# it (see app/tools/nmap_tool.py). It's only ever *used* if HEXAGENT_ENABLE_NMAP
+# is set to true at `docker run` time (off by default), but the binary must be
+# present in the image for that opt-in to work at all.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends nmap \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \

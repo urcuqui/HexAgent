@@ -55,7 +55,12 @@ class NmapScanTool(BaseTool):
         _base_url, host = normalise_target(target)
         if not _HOST_RE.match(host):
             return ToolResult.fail(self.name, f"Refusing to scan invalid/unsafe target {host!r}")
+        if ports and not _PORTS_RE.match(ports):
+            return ToolResult.fail(self.name, f"Invalid ports spec {ports!r}")
 
+        # Input validation happens before checking for the binary: a caller's
+        # malformed input should be rejected the same way regardless of
+        # whether nmap happens to be installed in this environment.
         binary_path = shutil.which(self._binary)
         if binary_path is None:
             return ToolResult.fail(
@@ -64,8 +69,6 @@ class NmapScanTool(BaseTool):
 
         command = [binary_path, "-Pn", "-sT", "-oX", "-"]
         if ports:
-            if not _PORTS_RE.match(ports):
-                return ToolResult.fail(self.name, f"Invalid ports spec {ports!r}")
             command += ["-p", ports]
         else:
             clamped = max(1, min(int(top_ports), _MAX_TOP_PORTS))

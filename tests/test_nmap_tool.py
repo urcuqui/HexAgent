@@ -61,6 +61,20 @@ def test_rejects_invalid_ports(monkeypatch):
     assert "ports" in result.error.lower()
 
 
+def test_input_validation_runs_even_without_the_binary_installed(monkeypatch):
+    # Regression test: invalid input must be rejected the same way regardless
+    # of whether nmap happens to be installed in this environment — validation
+    # must not be short-circuited by the binary-presence check running first.
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("must not exec nmap"))
+
+    unsafe_target = NmapScanTool().run(target="--script=vuln")
+    assert "unsafe" in unsafe_target.error.lower()
+
+    invalid_ports = NmapScanTool().run(target="example.com", ports="80; rm -rf /")
+    assert "ports" in invalid_ports.error.lower()
+
+
 def test_missing_binary_returns_error(monkeypatch):
     monkeypatch.setattr(shutil, "which", lambda _name: None)
     tool = NmapScanTool()
