@@ -9,7 +9,8 @@ while remaining trivially swappable for any OpenAI-compatible backend.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import contextlib
+from typing import TYPE_CHECKING, Any
 
 from app.config import Settings, get_settings
 from app.utils.logging import get_logger
@@ -59,3 +60,40 @@ class LLMFactory:
 def build_llm(settings: Settings | None = None) -> ChatOpenAI | None:
     """Convenience wrapper around :meth:`LLMFactory.build`."""
     return LLMFactory(settings).build()
+
+
+_JSON_MODE_ATTR = "_hexagent_json_mode_supported"
+
+
+def invoke_json(llm: Any, prompt: str) -> str:
+    """Invoke ``llm`` requesting native JSON-mode output; return the raw text.
+
+    Agents that expect a JSON object back (planner, executor, evaluator) use
+    this instead of a plain ``llm.invoke(prompt)`` so the model is constrained
+    to emit valid JSON directly (via the OpenAI-compatible ``response_format``
+    param) rather than relying solely on prompt instructions — this is what
+    :func:`app.utils.parsing.extract_json` was otherwise failing to recover
+    from prose the model wrapped around the JSON.
+
+    Some OpenAI-compatible gateways reject ``response_format`` outright (a
+    real network round trip that returns a 400). Once that happens for a given
+    ``llm`` instance, remember it (best-effort, via a plain attribute) so
+    subsequent calls skip straight to a plain invoke instead of paying that
+    failed round trip every single time for the rest of the run.
+    """
+    if getattr(llm, _JSON_MODE_ATTR, True):
+        try:
+            response = llm.bind(response_format={"type": "json_object"}).invoke(prompt)
+        except Exception as exc:  # noqa: BLE001 - fall back to an unconstrained call
+            logger.debug("JSON-mode invoke failed (%s); retrying without response_format", exc)
+            _remember_json_mode_support(llm, supported=False)
+        else:
+            _remember_json_mode_support(llm, supported=True)
+            return getattr(response, "content", str(response))
+    response = llm.invoke(prompt)
+    return getattr(response, "content", str(response))
+
+
+def _remember_json_mode_support(llm: Any, *, supported: bool) -> None:
+    with contextlib.suppress(Exception):  # caching is best-effort only
+        setattr(llm, _JSON_MODE_ATTR, supported)

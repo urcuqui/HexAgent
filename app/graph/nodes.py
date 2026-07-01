@@ -14,11 +14,21 @@ from app.agents.reporter import ReporterAgent
 from app.graph.state import AgentState
 from app.models.plan import StepStatus
 from app.models.report import ExecutedStep, Report
+from app.models.tool_io import ToolStatus
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-MAX_REPLANS = 2
+# Bumped from the original 2: a single reactive run can now legitimately
+# replan multiple times (open web ports -> HTTP phase, robots.txt -> targeted
+# GET, login endpoint -> controlled POST).
+MAX_REPLANS = 5
+
+_STEP_STATUS_BY_TOOL_STATUS = {
+    ToolStatus.SUCCESS: StepStatus.DONE,
+    ToolStatus.SKIPPED: StepStatus.SKIPPED,
+    ToolStatus.ERROR: StepStatus.FAILED,
+}
 
 
 class WorkflowNodes:
@@ -67,7 +77,7 @@ class WorkflowNodes:
                 "reasoning_history": [*state.reasoning_history, note],
             }
         result = self._executor.execute(step, state.target, state.observation_texts())
-        step.status = StepStatus.DONE if result.status.value == "success" else StepStatus.FAILED
+        step.status = _STEP_STATUS_BY_TOOL_STATUS.get(result.status, StepStatus.FAILED)
         executed = ExecutedStep(
             step_id=step.id,
             description=step.description,
@@ -113,7 +123,10 @@ class WorkflowNodes:
     def replan(self, state: AgentState) -> dict:
         """Revise the plan in response to new information."""
         assert state.plan is not None
-        plan = self._planner.replan(state.plan, state.replan_reason, state.observation_texts())
+        last_result = state.tool_results[-1] if state.tool_results else None
+        plan = self._planner.replan(
+            state.plan, state.replan_reason, state.observation_texts(), last_result
+        )
         note = f"Replanned ({state.replan_reason}); now {len(plan.steps)} step(s)"
         return {
             "plan": plan,

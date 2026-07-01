@@ -13,6 +13,7 @@ from app.agents.evaluator import EvaluatorAgent
 from app.agents.executor import ExecutorAgent
 from app.agents.planner_agent import PlannerAgent
 from app.agents.reporter import ReporterAgent
+from app.agents.specialists import ApprovalCallback
 from app.config import Settings, get_settings
 from app.graph.nodes import WorkflowNodes
 from app.graph.router import EXECUTE, HUMAN, REPLAN, REPORT, route_after_evaluate
@@ -60,15 +61,29 @@ def build_workflow(nodes: WorkflowNodes):
 
 
 def build_nodes(
-    registry: ToolRegistry | None = None, settings: Settings | None = None
+    registry: ToolRegistry | None = None,
+    settings: Settings | None = None,
+    approval_callback: ApprovalCallback | None = None,
 ) -> WorkflowNodes:
-    """Create the agent node bundle, wiring in an LLM when configured."""
+    """Create the agent node bundle, wiring in an LLM when configured.
+
+    Args:
+        approval_callback: Consulted before any tool marked ``sensitive`` runs
+            (e.g. ``http_post``, ``nmap_scan``) when
+            ``settings.require_sensitive_approval`` is set. Without one, such
+            actions are denied by default (fail-closed).
+    """
     settings = settings or get_settings()
     registry = registry or default_registry(enable_nmap=settings.enable_nmap)
     llm = build_llm(settings)
     return WorkflowNodes(
         planner=PlannerAgent(registry, llm),
-        executor=ExecutorAgent(registry, llm),
+        executor=ExecutorAgent(
+            registry,
+            llm,
+            approval_callback=approval_callback,
+            require_sensitive_approval=settings.require_sensitive_approval,
+        ),
         evaluator=EvaluatorAgent(llm),
         reporter=ReporterAgent(llm),
     )
@@ -79,6 +94,7 @@ def run_workflow(
     target: str,
     settings: Settings | None = None,
     registry: ToolRegistry | None = None,
+    approval_callback: ApprovalCallback | None = None,
 ) -> AgentState:
     """Run the full workflow for an objective/target and return the final state.
 
@@ -87,9 +103,10 @@ def run_workflow(
         target: Host or URL to (mock) assess.
         settings: Optional settings override; defaults to :func:`get_settings`.
         registry: Optional tool registry override; defaults to all mock tools.
+        approval_callback: See :func:`build_nodes`.
     """
     settings = settings or get_settings()
-    nodes = build_nodes(registry, settings)
+    nodes = build_nodes(registry, settings, approval_callback)
     app = build_workflow(nodes)
 
     initial = AgentState(

@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.models.plan import Plan
+from app.models.tool_io import ToolResult
 from app.planners.base import BasePlanner
 from app.planners.planner import build_planner
 from app.tools.registry import ToolRegistry
@@ -31,7 +32,13 @@ class PlannerAgent:
         logger.info("Plan created with %d step(s)", len(plan.steps))
         return plan
 
-    def replan(self, plan: Plan, reason: str, observations: list[str]) -> Plan:
+    def replan(
+        self,
+        plan: Plan,
+        reason: str,
+        observations: list[str],
+        last_result: ToolResult | None = None,
+    ) -> Plan:
         """Revise an existing plan given new information."""
         logger.info("Replanning due to: %s", reason)
-        return self._planner.replan(plan, reason, observations)
+        return self._planner.replan(plan, reason, observations, last_result)

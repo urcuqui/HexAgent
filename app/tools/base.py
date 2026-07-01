@@ -27,11 +27,16 @@ class BaseTool(ABC):
         description: One-line human description shown in the tool catalogue.
         argument_help: Mapping of argument name -> short description, used to
             build the catalogue presented to the LLM.
+        sensitive: True for tools that perform a real, state-changing or
+            network-touching action (e.g. a real port scan, a POST request).
+            Specialist agents gate these behind human approval when
+            ``require_sensitive_approval`` is enabled.
     """
 
     name: str = "base"
     description: str = "Abstract tool"
     argument_help: dict[str, str] = {}
+    sensitive: bool = False
 
     @abstractmethod
     def _run(self, **kwargs: Any) -> ToolResult:

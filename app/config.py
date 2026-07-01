@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # Agent behaviour
     max_iterations: int = Field(default=12, alias="HEXAGENT_MAX_ITERATIONS")
     require_human_approval: bool = Field(default=False, alias="HEXAGENT_REQUIRE_HUMAN_APPROVAL")
+    require_sensitive_approval: bool = Field(
+        default=False, alias="HEXAGENT_REQUIRE_SENSITIVE_APPROVAL"
+    )
 
     # Logging / output
     log_level: str = Field(default="INFO", alias="HEXAGENT_LOG_LEVEL")

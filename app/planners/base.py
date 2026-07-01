@@ -10,6 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from app.models.plan import Plan
+from app.models.tool_io import ToolResult
 from app.tools.registry import ToolRegistry
 
 
@@ -25,8 +26,18 @@ class BasePlanner(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def replan(self, plan: Plan, reason: str, observations: list[str]) -> Plan:
+    def replan(
+        self,
+        plan: Plan,
+        reason: str,
+        observations: list[str],
+        last_result: ToolResult | None = None,
+    ) -> Plan:
         """Return a revised plan given a replanning ``reason`` and observations.
+
+        ``last_result`` is the :class:`ToolResult` that triggered the replan
+        (when known), letting implementations react to its structured data
+        instead of re-parsing free-text observations.
 
         Implementations should preserve already-completed steps and append or
         adjust pending ones rather than discarding progress.

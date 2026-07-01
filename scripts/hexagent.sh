@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Self-healing wrapper around `uv run hexagent`.
+#
+# On some macOS + uv setups, uv's editable-install .pth file for this project
+# ends up with the BSD "hidden" flag set (even with [tool.uv] link-mode =
+# "copy" in pyproject.toml pinned to reduce it) — and Python 3.12+'s site.py
+# silently skips hidden .pth files, which breaks the `hexagent` console
+# script with `ModuleNotFoundError: No module named 'app'`. This has recurred
+# more than once, so rather than re-running `chflags` by hand every time,
+# this wrapper clears the flag before every invocation and then runs the CLI
+# via `python -m app.cli` (equivalent to `hexagent`, but immune to the .pth
+# issue either way — belt and suspenders).
+#
+# Usage: identical to `uv run hexagent`, e.g.:
+#   ./scripts/hexagent.sh -o "Map the attack surface" -t 127.0.0.1 --mock --print
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+for pth in "$repo_root"/.venv/lib/python3.*/site-packages/*.pth; do
+    if [ -e "$pth" ]; then
+        chflags nohidden "$pth" 2>/dev/null || true
+    fi
+done
+
+exec uv run --project "$repo_root" python -m app.cli "$@"

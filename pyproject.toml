@@ -37,6 +37,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
+[tool.uv]
+# Hardlinking (uv's default) shares inodes with uv's cache. On some macOS
+# setups the cached editable-install .pth file ends up with the BSD "hidden"
+# flag set, which is shared across all hardlinks — and Python 3.12+'s site.py
+# silently skips hidden .pth files, breaking `hexagent`/other console scripts
+# with `ModuleNotFoundError: No module named 'app'`. Copying avoids sharing
+# that inode/flag. See docs/nmap-testing.md and the README's macOS
+# troubleshooting note for background.
+link-mode = "copy"
+
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]

@@ -74,6 +74,7 @@ class HttpPostTool(BaseTool):
 
     name = "http_post"
     description = "Perform a (mock) HTTP POST request and return the simulated response"
+    sensitive = True
     argument_help = {
         "target": "base host or URL",
         "path": "request path, default '/login'",

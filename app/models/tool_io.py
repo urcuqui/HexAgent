@@ -74,3 +74,12 @@ class ToolResult(BaseModel):
             summary=f"{tool_name} failed",
             error=error,
         )
+
+    @classmethod
+    def skipped(cls, tool_name: str, reason: str) -> ToolResult:
+        """Convenience constructor for a tool that was not run (e.g. denied approval)."""
+        return cls(
+            tool_name=tool_name,
+            status=ToolStatus.SKIPPED,
+            summary=f"{tool_name} skipped: {reason}",
+        )

@@ -24,6 +24,18 @@ class StepStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+class ReplanReason(StrEnum):
+    """Stable, machine-readable codes the evaluator uses to request a replan.
+
+    Using codes (rather than free-text reasons) lets the planner dispatch on
+    them directly instead of pattern-matching observation strings.
+    """
+
+    OPEN_WEB_PORTS_FOUND = "open_web_ports_found"
+    ROBOTS_PATHS_FOUND = "robots_paths_found"
+    LOGIN_ENDPOINT_FOUND = "login_endpoint_found"
+
+
 class PlanStep(BaseModel):
     """A single actionable unit of the plan."""
 
@@ -57,8 +69,15 @@ class Plan(BaseModel):
         return [s for s in self.steps if s.status == StepStatus.PENDING]
 
     def completed_ids(self) -> set[str]:
-        """IDs of steps that finished successfully."""
-        return {s.id for s in self.steps if s.status == StepStatus.DONE}
+        """IDs of steps whose dependencies are considered satisfied.
+
+        A dependent step should become runnable once its prerequisite reaches
+        any terminal state (done, failed or skipped) — not only on success —
+        otherwise a single failed/skipped step would permanently block every
+        step that depends on it (e.g. the final synthesis step).
+        """
+        terminal = {StepStatus.DONE, StepStatus.FAILED, StepStatus.SKIPPED}
+        return {s.id for s in self.steps if s.status in terminal}
 
     def next_runnable(self) -> PlanStep | None:
         """Return the first runnable step honouring declared dependencies."""

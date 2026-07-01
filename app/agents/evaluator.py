@@ -11,13 +11,19 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.models.findings import Finding, Observation, Severity
-from app.models.plan import PlanStep
-from app.models.tool_io import ToolResult
+from app.models.plan import PlanStep, ReplanReason
+from app.models.tool_io import ToolResult, ToolStatus
 from app.prompts import PromptLibrary
+from app.utils.llm import invoke_json
 from app.utils.logging import get_logger
 from app.utils.parsing import extract_json
 
 logger = get_logger(__name__)
+
+# Ports that, if open, mean the target is worth analysing at the HTTP layer.
+_WEB_PORTS = {80, 443}
+# Ports the evaluator flags as sensitive regardless of the HTTP-layer decision.
+_SENSITIVE_PORTS = {22, 3306}
 
 
 class EvaluationResult(BaseModel):
@@ -50,9 +56,10 @@ class EvaluatorAgent:
         prompt = self._prompts.evaluator.format(
             objective=objective, step=step.model_dump_json(), tool_result=result.model_dump_json()
         )
+        text = None
         try:
-            response = self._llm.invoke(prompt)
-            data = extract_json(getattr(response, "content", str(response)))
+            text = invoke_json(self._llm, prompt)
+            data = extract_json(text)
             obs = [
                 Observation(source_tool=result.tool_name, step_id=step.id, content=o)
                 for o in data.get("observations", [])
@@ -66,6 +73,8 @@ class EvaluatorAgent:
             )
         except Exception as exc:  # noqa: BLE001 - fall back to heuristic evaluation
             logger.warning("LLM evaluation failed (%s); using heuristic evaluation", exc)
+            if text is not None:
+                logger.debug("Raw LLM evaluator output was: %r", text)
             return None
 
     def _evaluate_heuristically(self, step: PlanStep, result: ToolResult) -> EvaluationResult:
@@ -85,6 +94,15 @@ class EvaluatorAgent:
                     recommendation=rec,
                     requires_human_validation=human,
                 )
+            )
+
+        if result.status is ToolStatus.SKIPPED:
+            add(
+                "Sensitive action skipped",
+                Severity.INFO,
+                f"'{result.tool_name}' was not executed: {result.summary}",
+                "Review whether this action should be approved and re-run manually.",
+                human=True,
             )
 
         if result.tool_name == "security_headers" and data.get("missing"):
@@ -111,7 +129,7 @@ class EvaluatorAgent:
                 human=True,
             )
             needs_replan = True
-            reason = "robots.txt revealed paths worth inspecting"
+            reason = ReplanReason.ROBOTS_PATHS_FOUND
         if result.tool_name == "url_crawler" and data.get("interesting_urls"):
             add(
                 "Interesting endpoints discovered",
@@ -120,16 +138,26 @@ class EvaluatorAgent:
                 "Confirm access controls on these endpoints.",
                 human=True,
             )
-        if result.tool_name == "port_scan":
-            risky = [p for p in data.get("open_ports", []) if p.get("port") in (22, 3306)]
+            if any("login" in u for u in data["interesting_urls"]):
+                needs_replan = True
+                reason = ReplanReason.LOGIN_ENDPOINT_FOUND
+        if result.tool_name in ("port_scan", "nmap_scan"):
+            open_ports = {p.get("port") for p in data.get("open_ports", [])}
+            risky = open_ports & _SENSITIVE_PORTS
             if risky:
                 add(
                     "Sensitive service exposure",
                     Severity.MEDIUM,
-                    f"Potentially sensitive ports open: {[p['port'] for p in risky]}.",
+                    f"Potentially sensitive ports open: {sorted(risky)}.",
                     "Restrict management/database ports via firewall or VPN.",
                     human=True,
                 )
+            # Decision logic: only bother with HTTP-layer analysis if there's
+            # actually a web service listening — this is the "if the scan
+            # finds 80/443 -> use HTTP tools" branch.
+            if open_ports & _WEB_PORTS:
+                needs_replan = True
+                reason = ReplanReason.OPEN_WEB_PORTS_FOUND
 
         return EvaluationResult(
             observations=obs, findings=findings, needs_replan=needs_replan, replan_reason=reason

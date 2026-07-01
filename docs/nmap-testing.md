@@ -114,31 +114,91 @@ print(result.data['open_ports'])
 "
 ```
 
-## 5. Use it inside the full agent workflow
+## 5. Use it inside the full agent workflow — a single CLI prompt
 
-The heuristic (offline) planner follows a fixed recon recipe and never picks
-`nmap_scan` on its own, so end-to-end testing requires either an LLM planner
-that decides to use it, or manually building a `Plan` step that names it.
-
-### 5a. Enable it for a real run via `.env`
-
-```bash
-# .env
-HEXAGENT_ENABLE_NMAP=true
-```
-
-With an LLM configured (`AI_GATEWAY_API_KEY` set, `HEXAGENT_MOCK_MODE=false`),
-`nmap_scan` will appear in the tool catalogue the planner prompt receives, and
-the LLM may choose to call it for network-recon objectives. Run as usual:
+The heuristic (offline) planner's initial scan step prefers the real
+`nmap_scan` over the mock `port_scan` automatically whenever `nmap_scan` is
+registered (`HEXAGENT_ENABLE_NMAP=true`) — see `_SCAN_TOOL_PREFERENCE` in
+`app/planners/planner.py`. This means a single, ordinary CLI invocation drives
+the *entire* graph (plan → execute → evaluate → replan → report) with a real
+scan, no LLM and no custom scripting required — this is the "prompt directo al
+primer agente" way to test it end to end:
 
 ```bash
-uv run hexagent --objective "Scan the lab host for open ports" --target 127.0.0.1 --print
+HEXAGENT_ENABLE_NMAP=true uv run hexagent \
+  -o "Map the attack surface" -t 127.0.0.1 --mock --print --no-save
 ```
 
-### 5b. Force a single nmap step without an LLM
+`--mock` keeps planning/evaluation on the deterministic heuristic path (no LLM
+call), while `HEXAGENT_ENABLE_NMAP=true` still lets the real `nmap_scan` run
+as step 1. Inspect the printed report: `## Executed Steps` shows `nmap_scan`
+first, and if it found 80/443 open, replans queue the HTTP-analysis phase
+exactly as with the mock — except now driven by real scan data instead of the
+fixture.
 
-To exercise the executor/evaluator path deterministically (no LLM needed),
-build a one-step plan by hand:
+### 5a. Add the sensitive-approval gate to the same prompt
+
+Since `nmap_scan` is `sensitive`, layering `--require-sensitive-approval` onto
+the exact same command pauses *before* that first real scan runs:
+
+```bash
+# Deny it — the scan never runs, the plan still completes.
+echo "n" | HEXAGENT_ENABLE_NMAP=true uv run hexagent \
+  -o "Map the attack surface" -t 127.0.0.1 --mock --require-sensitive-approval --no-save
+
+# Approve it — nmap runs for real.
+echo "y" | HEXAGENT_ENABLE_NMAP=true uv run hexagent \
+  -o "Map the attack surface" -t 127.0.0.1 --mock --require-sensitive-approval --no-save
+```
+
+Drop the `echo | ` prefix to answer the `Approve this action? [y/N]:` prompt
+interactively in a real terminal.
+
+> If `uv run hexagent` raises `ModuleNotFoundError: No module named 'app'`,
+> see the macOS troubleshooting note in the top-level `README.md` — swap in
+> `uv run python -m app.cli` (same arguments) as a workaround.
+
+### 5b. With an LLM instead of `--mock`
+
+Without `--mock` (and `AI_GATEWAY_API_KEY` set), the LLM planner/evaluator
+take over instead of the deterministic heuristic path — useful to see the
+model reason about the same real scan data, but no longer bit-for-bit
+reproducible run to run.
+
+## 6. Point-to-point: ReconAgent -> nmap_scan -> approval gate
+
+`nmap_scan` is marked `sensitive = True`, so it's owned by `ReconAgent`
+(`app/agents/specialists.py`) and gated the same way `http_post` is: if
+`require_sensitive_approval` is on, the specialist consults an
+`approval_callback` *before* calling the registry; no callback means denied
+(fail-closed).
+
+### 6a. `ReconAgent` directly, gate on/off
+
+```bash
+uv run python -c "
+from app.tools.registry import default_registry
+from app.agents.specialists import ReconAgent
+from app.models.tool_io import ToolCall
+
+registry = default_registry(enable_nmap=True)
+recon = ReconAgent(registry)
+print('owns nmap_scan:', recon.owns('nmap_scan'))
+
+# No gate: runs for real.
+print(recon.run(ToolCall(tool_name='nmap_scan', arguments={'target': '127.0.0.1', 'top_ports': 20})).status)
+
+# Gate on, no callback -> denied (fail-closed), not blocked.
+gated = ReconAgent(registry, require_sensitive_approval=True)
+print(gated.run(ToolCall(tool_name='nmap_scan', arguments={'target': '127.0.0.1'})).status)
+
+# Gate on, callback approves -> runs for real.
+approved = ReconAgent(registry, approval_callback=lambda call: True, require_sensitive_approval=True)
+print(approved.run(ToolCall(tool_name='nmap_scan', arguments={'target': '127.0.0.1', 'top_ports': 20})).status)
+"
+```
+
+### 6b. Through `ExecutorAgent` (select -> dispatch -> specialist)
 
 ```bash
 uv run python -c "
@@ -147,16 +207,34 @@ from app.agents.executor import ExecutorAgent
 from app.models.plan import PlanStep
 
 registry = default_registry(enable_nmap=True)
-executor = ExecutorAgent(registry, llm=None)  # llm=None -> heuristic, step-declared tool
+step = PlanStep(id='s1', description='nmap scan', tool_name='nmap_scan', arguments={'top_ports': 20})
 
-step = PlanStep(id='s1', description='nmap scan', tool_name='nmap_scan',
-                arguments={'top_ports': 50})
-result = executor.execute(step, target='127.0.0.1', observations=[])
-print(result.status, result.summary)
+denied = ExecutorAgent(registry, require_sensitive_approval=True, approval_callback=lambda c: False)
+print('denied:', denied.execute(step, target='127.0.0.1', observations=[]).status)
+
+approved = ExecutorAgent(registry, require_sensitive_approval=True, approval_callback=lambda c: True)
+print('approved:', approved.execute(step, target='127.0.0.1', observations=[]).status)
 "
 ```
 
-## 6. Lint and type-check
+### 6c. Full LangGraph pipeline with nmap as the scan step
+
+This no longer needs custom scripting — see **§5, "Use it inside the full
+agent workflow"** above: because the planner prefers `nmap_scan` automatically
+once it's registered, a plain `uv run hexagent ... --mock` (optionally with
+`--require-sensitive-approval`) already drives the entire graph — plan →
+execute → evaluate → replan → report — with the real tool.
+
+On a host with nothing listening on 80/443 (e.g. plain `127.0.0.1`), that run
+correctly executes only `nmap_scan` and stops (`Replans: 0`) because the
+`open_web_ports_found` decision genuinely found none, using real scan data
+instead of the mock fixture. Denying the approval prompt resolves the nmap
+step to a `SKIPPED` tool result, a "Sensitive action skipped" finding, and the
+run still completes normally (this exercises the `completed_ids()`
+terminal-state fix — without it, a skipped/failed prerequisite would
+permanently block the synthesis step).
+
+## 7. Lint and type-check
 
 ```bash
 uv run ruff check app/tools/nmap_tool.py tests/test_nmap_tool.py

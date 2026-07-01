@@ -38,6 +38,7 @@ class NmapScanTool(BaseTool):
         "Real TCP connect scan (nmap -sT) against an explicitly authorised host. "
         "Requires the nmap binary on PATH."
     )
+    sensitive = True
     argument_help = {
         "target": "host, IP or URL to scan (lab/authorised targets only)",
         "ports": "port spec, e.g. '22,80,443' or '1-1000' (overrides top_ports)",

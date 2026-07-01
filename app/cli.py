@@ -18,10 +18,20 @@ from rich.table import Table
 from app.config import get_settings
 from app.graph.state import AgentState
 from app.graph.workflow import run_workflow
+from app.models.tool_io import ToolCall
 from app.utils.logging import configure_logging
 from app.utils.report_io import save_report
 
 console = Console()
+
+
+def _interactive_approval(call: ToolCall) -> bool:
+    """Pause the CLI and ask a human to approve a sensitive tool call."""
+    console.print(
+        f"[yellow]Sensitive action pending approval:[/yellow] {call.tool_name} {call.arguments}"
+    )
+    answer = input("Approve this action? [y/N]: ").strip().lower()
+    return answer in ("y", "yes")
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -34,6 +44,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-iterations", type=int, default=None, help="Override iteration cap.")
     parser.add_argument(
         "--human-approval", action="store_true", help="Pause for human approval before report."
+    )
+    parser.add_argument(
+        "--require-sensitive-approval",
+        action="store_true",
+        help="Pause and ask before running any sensitive tool (e.g. http_post, nmap_scan).",
     )
     parser.add_argument("--no-save", action="store_true", help="Do not write the report to disk.")
     parser.add_argument("--print", dest="print_report", action="store_true", help="Print report.")
@@ -76,10 +91,15 @@ def main(argv: list[str] | None = None) -> int:
         settings.max_iterations = args.max_iterations
     if args.human_approval:
         settings.require_human_approval = True
+    if args.require_sensitive_approval:
+        settings.require_sensitive_approval = True
 
     configure_logging(settings.log_level)
 
-    state = run_workflow(args.objective, args.target, settings=settings)
+    approval_callback = _interactive_approval if settings.require_sensitive_approval else None
+    state = run_workflow(
+        args.objective, args.target, settings=settings, approval_callback=approval_callback
+    )
     _render_summary(state)
 
     markdown = state.report_markdown or "(no report generated)"
