@@ -106,9 +106,13 @@ HexAgent/
 │   ├── prompts/       # prompt loader + templates/*.txt
 │   ├── tools/         # BaseTool, registry, mock tools, deterministic fixtures
 │   ├── utils/         # logging, LLM factory, parsing, report IO
+│   ├── templates/     # Jinja2 templates for the web UI
+│   ├── static/        # CSS/JS for the web UI
 │   ├── cli.py         # command-line interface
+│   ├── web.py         # Flask web UI (optional; `uv sync --extra web`)
 │   └── config.py      # pydantic-settings configuration
 ├── examples/          # runnable programmatic example
+├── scripts/           # dev helper scripts (e.g. hexagent.sh)
 ├── tests/             # pytest suite
 ├── docs/              # architecture notes
 ├── main.py            # thin launcher -> app.cli:main
@@ -234,6 +238,45 @@ print(state.report_markdown)
 ```bash
 uv run python examples/basic_recon.py
 ```
+
+### Web UI
+
+A small Flask front-end lets you launch a run from a form and watch the
+whole agent pipeline (plan → execute → evaluate → replan → report) stream
+live in the browser — including a real, in-the-moment Approve/Deny prompt
+when `--require-sensitive-approval` pauses before `http_post`/`nmap_scan`.
+
+```bash
+uv sync --extra web            # installs Flask + markdown/nh3 (kept optional; the CLI stays dependency-light)
+uv run hexagent-web            # or: uv run python -m app.web
+# then open http://127.0.0.1:5000
+```
+
+> **No authentication, local only.** This is an educational dev tool, not a
+> hardened service — it binds to `127.0.0.1` by default and has no login.
+> Never pass `--host 0.0.0.0` or otherwise expose it to a network.
+
+The launch form exposes the same knobs as the CLI flags (`--mock`,
+`--enable-nmap`, `--max-iterations`, `--human-approval`,
+`--require-sensitive-approval`); the live console shows one log line per
+graph node, findings as they're discovered, and the final report rendered as
+formatted HTML (headings, tables, code blocks) with a "view raw markdown"
+toggle. The approval pause is real: the background run thread genuinely
+blocks until you click Approve or Deny, the same way the CLI's `input()`
+prompt does.
+
+**Report rendering is sanitised, not just escaped.** `objective`/`target` and
+tool arguments are user-supplied and flow verbatim into the report, so the
+server renders the markdown with `python-markdown` and then strips the
+resulting HTML down to an explicit tag allow-list with `nh3` (a Rust-backed
+HTML sanitiser) before sending it to the browser — a `<script>` in your
+objective is dropped from the rendered view entirely (it's still visible,
+inert, in the "view raw markdown" toggle). Escaping the source text before
+rendering was tried first and rejected: it double-escapes fenced code blocks.
+
+It reuses `build_nodes()`/`build_workflow()` from `app/graph/workflow.py`
+directly (driving `.stream()` instead of `.invoke()`) rather than modifying
+`run_workflow()`, so the CLI and test suite are unaffected by this feature.
 
 ---
 

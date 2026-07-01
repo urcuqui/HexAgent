@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}HexAgent{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-hex">Hex</span><span class="brand-agent">Agent</span>
+    </a>
+    <span class="topbar-tag">agentic recon &mdash; educational POC</span>
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    Educational proof-of-concept. Only ever target systems you own or are explicitly authorised to test.
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

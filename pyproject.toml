@@ -26,9 +26,15 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+web = [
+    "flask>=3.0",
+    "markdown>=3.6",
+    "nh3>=0.2",
+]
 
 [project.scripts]
 hexagent = "app.cli:main"
+hexagent-web = "app.web:main"
 
 [build-system]
 requires = ["hatchling"]

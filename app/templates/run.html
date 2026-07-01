@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run_id[:8] }} &mdash; HexAgent{% endblock %}
+{% block content %}
+<section class="run-view" id="run-view" data-run-id="{{ run_id }}">
+  <div class="run-header">
+    <div>
+      <h1 class="panel-title" id="run-title">&gt; Run <span class="mono">{{ run_id[:8] }}</span></h1>
+      <p class="panel-sub" id="run-meta">connecting&hellip;</p>
+    </div>
+    <span class="status-badge status-running" id="status-badge">running</span>
+  </div>
+
+  <div class="run-grid">
+    <div class="panel log-panel">
+      <h2 class="panel-heading">&gt; live log</h2>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="panel side-panel">
+      <div id="approval-panel" class="approval-panel hidden">
+        <h2 class="panel-heading">&#9888; approval required</h2>
+        <p id="approval-detail" class="mono"></p>
+        <div class="approval-actions">
+          <button class="btn-approve" id="btn-approve">Approve</button>
+          <button class="btn-deny" id="btn-deny">Deny</button>
+        </div>
+      </div>
+
+      <h2 class="panel-heading">&gt; findings</h2>
+      <ul class="findings" id="findings"></ul>
+    </div>
+  </div>
+
+  <div class="panel report-panel hidden" id="report-panel">
+    <div class="report-panel-header">
+      <h2 class="panel-heading">&gt; final report</h2>
+      <button class="btn-link" id="btn-toggle-raw" type="button">view raw markdown</button>
+    </div>
+    <div id="report-html" class="report-html"></div>
+    <pre id="report-raw" class="hidden"></pre>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}
