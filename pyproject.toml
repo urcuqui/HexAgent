@@ -44,13 +44,13 @@ build-backend = "hatchling.build"
 packages = ["app"]
 
 [tool.uv]
-# Hardlinking (uv's default) shares inodes with uv's cache. On some macOS
-# setups the cached editable-install .pth file ends up with the BSD "hidden"
-# flag set, which is shared across all hardlinks — and Python 3.12+'s site.py
-# silently skips hidden .pth files, breaking `hexagent`/other console scripts
-# with `ModuleNotFoundError: No module named 'app'`. Copying avoids sharing
-# that inode/flag. See docs/nmap-testing.md and the README's macOS
-# troubleshooting note for background.
+# link-mode = "copy" was an earlier attempt to avoid the BSD UF_HIDDEN flag
+# that uv sets on .venv and its contents on macOS. Python 3.12 site.py skips
+# hidden .pth files, so the editable-install path entry is never loaded.
+# Copying from cache still produces a hidden file because the destination
+# directory (.venv/lib/…/site-packages) itself carries UF_HIDDEN.
+# The real fix is PYTHONPATH=. in the env-file below, which bypasses .pth
+# entirely. See scripts/hexagent-web.sh and README troubleshooting section.
 link-mode = "copy"
 
 [tool.pytest.ini_options]

@@ -225,6 +225,11 @@ def index() -> str:
     return render_template("index.html")
 
 
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "service": "hexagent"})
+
+
 @app.post("/run")
 def start_run():
     form = request.form

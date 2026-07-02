@@ -59,6 +59,12 @@ def test_index_page_loads(client):
     assert b"New Engagement" in resp.data
 
 
+def test_health_endpoint(client):
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"service": "hexagent", "status": "ok"}
+
+
 def test_run_requires_objective_and_target(client):
     resp = client.post("/run", data={"objective": "", "target": ""})
     assert resp.status_code == 400

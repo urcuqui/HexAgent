@@ -248,9 +248,20 @@ when `--require-sensitive-approval` pauses before `http_post`/`nmap_scan`.
 
 ```bash
 uv sync --extra web            # installs Flask + markdown/nh3 (kept optional; the CLI stays dependency-light)
-uv run hexagent-web            # or: uv run python -m app.web
+./scripts/hexagent-web.sh      # or: uv run python -m app.web
 # then open http://127.0.0.1:5000
 ```
+
+### Docker lab
+
+For a VM or host with Docker and Docker Compose:
+
+```bash
+./run_lab.sh
+# then open http://localhost:8000
+```
+
+Set `HEXAGENT_WEB_PORT=8080 ./run_lab.sh` to expose a different host port.
 
 > **No authentication, local only.** This is an educational dev tool, not a
 > hardened service — it binds to `127.0.0.1` by default and has no login.
