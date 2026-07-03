@@ -86,3 +86,24 @@ class HttpAnalysisAgent(SpecialistAgent):
     TOOL_NAMES: ClassVar[frozenset[str]] = frozenset(
         {"http_get", "http_post", "http_header_inspect"}
     )
+
+
+class BrowserAgent(SpecialistAgent):
+    """Owns Playwright browser interaction tools.
+
+    ``browser_login`` is marked ``sensitive`` (it submits credentials and
+    modifies application state) so it is gated behind the approval callback
+    when ``require_sensitive_approval`` is enabled. The other browser tools are
+    read-only/observational and run without approval.
+    """
+
+    TOOL_NAMES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "browser_open",
+            "browser_analyze_page",
+            "browser_login",
+            "browser_click",
+            "browser_screenshot",
+            "browser_close",
+        }
+    )

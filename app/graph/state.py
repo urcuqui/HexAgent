@@ -44,6 +44,10 @@ class AgentState(BaseModel):
     awaiting_human: bool = False
     stopped_reason: str = ""
 
+    # Browser session (populated by evaluator when Playwright tools are active)
+    browser_session_active: bool = False
+    browser_screenshots: list[str] = Field(default_factory=list)
+
     # Outputs
     human_validation_points: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)

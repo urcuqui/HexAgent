@@ -33,6 +33,9 @@ class EvaluationResult(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     needs_replan: bool = False
     replan_reason: str = ""
+    # Browser-specific state carried back to the graph node.
+    new_screenshots: list[str] = Field(default_factory=list)
+    browser_session_active: bool | None = None  # None = no change
 
 
 class EvaluatorAgent:
@@ -159,6 +162,136 @@ class EvaluatorAgent:
                 needs_replan = True
                 reason = ReplanReason.OPEN_WEB_PORTS_FOUND
 
+        # -- Browser tool heuristics ------------------------------------------
+        new_screenshots: list[str] = []
+        browser_session_active: bool | None = None
+
+        if result.tool_name == "browser_open":
+            browser_session_active = data.get("success", False)
+            title = data.get("title") or ""
+            url = data.get("current_url") or ""
+            api_hints = data.get("potential_api_endpoints") or []
+            auth_indicators = data.get("auth_indicators") or []
+            forms = data.get("forms") or []
+            screenshot = data.get("screenshot_path")
+            if screenshot:
+                new_screenshots.append(screenshot)
+
+            obs.append(
+                Observation(
+                    source_tool=result.tool_name,
+                    step_id=step.id if step else None,
+                    content=f"Browser opened {url!r} (title={title!r}). "
+                    f"Auth indicators: {auth_indicators}. "
+                    f"API hints: {api_hints}. "
+                    f"Forms found: {len(forms)}.",
+                )
+            )
+            # Surface API endpoints as a finding.
+            if api_hints:
+                add(
+                    "Browser-discovered API endpoints",
+                    Severity.INFO,
+                    f"JavaScript-rendered links hint at API endpoints: {', '.join(api_hints[:10])}.",
+                    "Replay these requests with the HTTP validation tool to confirm access controls.",
+                )
+            # Trigger a replan to queue browser_login when a login form is present.
+            has_password_field = any(
+                f.get("type") == "password"
+                for form in forms
+                for f in form.get("fields", [])
+            )
+            if has_password_field or any(
+                "password" in str(ind).lower() for ind in auth_indicators
+            ):
+                needs_replan = True
+                reason = ReplanReason.BROWSER_LOGIN_FORM_FOUND
+
+        if result.tool_name == "browser_analyze_page":
+            browser_session_active = True
+            url = data.get("current_url") or ""
+            api_hints = data.get("potential_api_endpoints") or []
+            screenshot = data.get("screenshot_path")
+            if screenshot:
+                new_screenshots.append(screenshot)
+            obs.append(
+                Observation(
+                    source_tool=result.tool_name,
+                    step_id=step.id if step else None,
+                    content=f"Browser page analysis at {url!r}. "
+                    f"API hints: {api_hints}. "
+                    f"Network requests captured: "
+                    f"{len(data.get('network_requests') or [])}.",
+                )
+            )
+            if api_hints:
+                add(
+                    "Browser-observed API endpoints",
+                    Severity.INFO,
+                    f"API-like endpoints observed in browser session: {', '.join(api_hints[:10])}.",
+                    "Replay these requests with the HTTP validation tool.",
+                )
+
+        if result.tool_name == "browser_login":
+            browser_session_active = data.get("success", False)
+            url = data.get("current_url") or ""
+            screenshot = data.get("screenshot_path")
+            if screenshot:
+                new_screenshots.append(screenshot)
+            outcome = "succeeded" if data.get("success") else "failed"
+            obs.append(
+                Observation(
+                    source_tool=result.tool_name,
+                    step_id=step.id if step else None,
+                    content=f"Browser login {outcome}; now at {url!r}. "
+                    f"Network requests captured: "
+                    f"{len(data.get('network_requests') or [])}.",
+                )
+            )
+            # Surface API calls captured post-login as findings.
+            api_reqs = [
+                r["url"]
+                for r in (data.get("network_requests") or [])
+                if any(k in r.get("url", "") for k in ("/api/", "/graphql", "/v1/", "/v2/"))
+            ]
+            if api_reqs:
+                add(
+                    "Post-login API requests captured",
+                    Severity.INFO,
+                    f"API endpoints observed after authentication: {', '.join(api_reqs[:10])}.",
+                    "Replay these authenticated requests with the HTTP validation tool to test "
+                    "authorisation controls.",
+                    human=True,
+                )
+
+        if result.tool_name == "browser_screenshot":
+            browser_session_active = True
+            path = data.get("screenshot_path")
+            if path:
+                new_screenshots.append(path)
+                obs.append(
+                    Observation(
+                        source_tool=result.tool_name,
+                        step_id=step.id if step else None,
+                        content=f"Evidence screenshot saved: {path}.",
+                    )
+                )
+
+        if result.tool_name == "browser_close":
+            browser_session_active = False
+            obs.append(
+                Observation(
+                    source_tool=result.tool_name,
+                    step_id=step.id if step else None,
+                    content="Browser session closed.",
+                )
+            )
+
         return EvaluationResult(
-            observations=obs, findings=findings, needs_replan=needs_replan, replan_reason=reason
+            observations=obs,
+            findings=findings,
+            needs_replan=needs_replan,
+            replan_reason=reason,
+            new_screenshots=new_screenshots,
+            browser_session_active=browser_session_active,
         )

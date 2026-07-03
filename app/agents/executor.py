@@ -11,7 +11,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.agents.specialists import ApprovalCallback, HttpAnalysisAgent, ReconAgent, SpecialistAgent
+from app.agents.specialists import (
+    ApprovalCallback,
+    BrowserAgent,
+    HttpAnalysisAgent,
+    ReconAgent,
+    SpecialistAgent,
+)
 from app.models.plan import PlanStep
 from app.models.tool_io import ToolCall, ToolResult
 from app.prompts import PromptLibrary
@@ -40,6 +46,7 @@ class ExecutorAgent:
         self._specialists: list[SpecialistAgent] = [
             ReconAgent(registry, approval_callback, require_sensitive_approval),
             HttpAnalysisAgent(registry, approval_callback, require_sensitive_approval),
+            BrowserAgent(registry, approval_callback, require_sensitive_approval),
         ]
 
     def select(self, step: PlanStep, target: str, observations: list[str]) -> ToolCall:

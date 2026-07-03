@@ -43,11 +43,12 @@ def build_workflow(nodes: WorkflowNodes):
     graph.add_node("replan", nodes.replan)
     graph.add_node("human", nodes.human_checkpoint)
     graph.add_node("report", nodes.report)
-
+    
+    # the next is the first node
     graph.add_edge(START, "intake")
-    graph.add_edge("intake", "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "evaluate")
+    graph.add_edge("intake", "plan") # planner agent
+    graph.add_edge("plan", "execute") # executor agent
+    graph.add_edge("execute", "evaluate") 
     graph.add_conditional_edges(
         "evaluate",
         route_after_evaluate,
@@ -74,7 +75,11 @@ def build_nodes(
             actions are denied by default (fail-closed).
     """
     settings = settings or get_settings()
-    registry = registry or default_registry(enable_nmap=settings.enable_nmap)
+    registry = registry or default_registry(
+        enable_nmap=settings.enable_nmap,
+        enable_playwright=settings.enable_playwright,
+        settings=settings,
+    )
     llm = build_llm(settings)
     return WorkflowNodes(
         planner=PlannerAgent(registry, llm),

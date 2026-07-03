@@ -38,6 +38,13 @@ _HTTP_PHASE_STEPS: list[tuple[str, str]] = [
     ("Discover endpoints by crawling", "url_crawler"),
 ]
 
+# Steps appended after the HTTP phase when Playwright tools are registered.
+_BROWSER_PHASE_STEPS: list[tuple[str, str]] = [
+    ("Explore web application with browser", "browser_open"),
+    ("Analyse page content and forms", "browser_analyze_page"),
+    ("Close browser session", "browser_close"),
+]
+
 
 class HeuristicPlanner(BasePlanner):
     """Deterministic planner that reacts to results instead of front-loading
@@ -79,6 +86,8 @@ class HeuristicPlanner(BasePlanner):
             return self._on_robots_paths(plan, last_result)
         if reason == ReplanReason.LOGIN_ENDPOINT_FOUND:
             return self._on_login_endpoint(plan, last_result)
+        if reason == ReplanReason.BROWSER_LOGIN_FORM_FOUND:
+            return self._on_browser_login_form(plan, last_result)
         return plan
 
     def _on_open_web_ports(self, plan: Plan, result: ToolResult) -> Plan:
@@ -100,8 +109,22 @@ class HeuristicPlanner(BasePlanner):
             )
             for i, (desc, tool) in enumerate(_HTTP_PHASE_STEPS)
         ]
-        plan.rationale = "Open web port(s) found; queued HTTP-layer analysis."
-        return self._insert_before_summary(plan, new_steps)
+        # Add browser exploration phase when Playwright tools are registered.
+        browser_steps = [
+            PlanStep(
+                id=f"s{len(plan.steps) + len(new_steps) + i + 1}",
+                description=desc,
+                tool_name=tool,
+                arguments={"target": target},
+            )
+            for i, (desc, tool) in enumerate(_BROWSER_PHASE_STEPS)
+            if self._registry.get(tool) is not None
+        ]
+        all_new = new_steps + browser_steps
+        plan.rationale = "Open web port(s) found; queued HTTP-layer analysis" + (
+            " and browser exploration." if browser_steps else "."
+        )
+        return self._insert_before_summary(plan, all_new)
 
     def _on_robots_paths(self, plan: Plan, result: ToolResult) -> Plan:
         disallowed = result.data.get("disallowed_paths") or []
@@ -135,6 +158,23 @@ class HeuristicPlanner(BasePlanner):
             arguments={"target": target, "path": path, "data": {"probe": "hexagent"}},
         )
         plan.rationale = f"Login endpoint discovered ({path}); queued a controlled POST."
+        return self._insert_before_summary(plan, [step])
+
+    def _on_browser_login_form(self, plan: Plan, result: ToolResult) -> Plan:
+        """Queue browser_login when a login form is detected by browser_open."""
+        if any(s.tool_name == "browser_login" for s in plan.steps):
+            return plan  # already queued
+        if self._registry.get("browser_login") is None:
+            return plan  # browser tools not registered
+        target = self._target_from_plan(plan)
+        login_url = result.data.get("current_url") or ""
+        step = PlanStep(
+            id=f"s{len(plan.steps) + 1}",
+            description="Authenticate through the discovered login form",
+            tool_name="browser_login",
+            arguments={"target": target, "url": login_url},
+        )
+        plan.rationale = "Login form detected in browser; queued browser_login."
         return self._insert_before_summary(plan, [step])
 
     @staticmethod

@@ -49,6 +49,19 @@ class Settings(BaseSettings):
 
     # Real tools (off by default; only use against explicitly authorised targets).
     enable_nmap: bool = Field(default=False, alias="HEXAGENT_ENABLE_NMAP")
+    enable_playwright: bool = Field(default=False, alias="HEXAGENT_ENABLE_PLAYWRIGHT")
+
+    # Playwright browser settings (only used when enable_playwright=True).
+    playwright_headless: bool = Field(default=True, alias="PLAYWRIGHT_HEADLESS")
+    playwright_timeout_ms: int = Field(default=15_000, alias="PLAYWRIGHT_TIMEOUT_MS")
+    playwright_max_actions: int = Field(default=20, alias="PLAYWRIGHT_MAX_ACTIONS")
+    playwright_max_requests: int = Field(default=200, alias="PLAYWRIGHT_MAX_REQUESTS")
+    playwright_max_body_preview_bytes: int = Field(
+        default=2_000, alias="PLAYWRIGHT_MAX_BODY_PREVIEW_BYTES"
+    )
+    playwright_screenshots_enabled: bool = Field(
+        default=True, alias="PLAYWRIGHT_SCREENSHOTS_ENABLED"
+    )
 
     # Agent behaviour
     max_iterations: int = Field(default=12, alias="HEXAGENT_MAX_ITERATIONS")

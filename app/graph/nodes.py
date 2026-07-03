@@ -111,7 +111,7 @@ class WorkflowNodes:
             if f.requires_human_validation
         ]
         note = f"Evaluated {result.tool_name}: {len(evaluation.findings)} finding(s)"
-        return {
+        updates: dict = {
             "observations": [*state.observations, *evaluation.observations],
             "findings": [*state.findings, *evaluation.findings],
             "human_validation_points": [*state.human_validation_points, *human_points],
@@ -119,6 +119,15 @@ class WorkflowNodes:
             "replan_reason": evaluation.replan_reason,
             "reasoning_history": [*state.reasoning_history, note],
         }
+        # Merge browser-specific state when the evaluator produced it.
+        if evaluation.new_screenshots:
+            updates["browser_screenshots"] = [
+                *state.browser_screenshots,
+                *evaluation.new_screenshots,
+            ]
+        if evaluation.browser_session_active is not None:
+            updates["browser_session_active"] = evaluation.browser_session_active
+        return updates
 
     def replan(self, state: AgentState) -> dict:
         """Revise the plan in response to new information."""

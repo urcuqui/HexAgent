@@ -56,7 +56,11 @@ class ToolRegistry:
         return tool.run(**kwargs)
 
 
-def default_registry(enable_nmap: bool = False) -> ToolRegistry:
+def default_registry(
+    enable_nmap: bool = False,
+    enable_playwright: bool = False,
+    settings: object | None = None,
+) -> ToolRegistry:
     """Build a registry pre-populated with all built-in mock tools.
 
     Args:
@@ -64,6 +68,12 @@ def default_registry(enable_nmap: bool = False) -> ToolRegistry:
             shells out to a real ``nmap`` binary. Off by default so the
             standard registry stays fully mock/offline; wire it to
             ``Settings.enable_nmap`` to opt in.
+        enable_playwright: When ``True``, register the six Playwright browser
+            tools. Playwright must be installed (``pip install playwright &&
+            playwright install chromium``). Off by default.
+        settings: Optional :class:`~app.config.Settings` instance used to
+            configure the Playwright browser tools (headless, timeouts, …).
+            Ignored when ``enable_playwright`` is ``False``.
     """
     # Imported here to avoid a circular import at module load time.
     from app.tools.http_tools import (
@@ -93,4 +103,37 @@ def default_registry(enable_nmap: bool = False) -> ToolRegistry:
         from app.tools.nmap_tool import NmapScanTool
 
         tools.append(NmapScanTool())
+
+    if enable_playwright:
+        from pathlib import Path
+
+        from app.tools.browser_tools import build_browser_tools
+
+        headless = True
+        timeout_ms = 15_000
+        max_requests = 200
+        max_body_preview_bytes = 2_000
+        screenshot_dir: Path | None = None
+
+        if settings is not None:
+            headless = getattr(settings, "playwright_headless", headless)
+            timeout_ms = getattr(settings, "playwright_timeout_ms", timeout_ms)
+            max_requests = getattr(settings, "playwright_max_requests", max_requests)
+            max_body_preview_bytes = getattr(
+                settings, "playwright_max_body_preview_bytes", max_body_preview_bytes
+            )
+            report_dir = getattr(settings, "report_dir", None)
+            if report_dir is not None:
+                screenshot_dir = Path(report_dir) / "screenshots"
+
+        tools.extend(
+            build_browser_tools(
+                headless=headless,
+                timeout_ms=timeout_ms,
+                max_requests=max_requests,
+                max_body_preview_bytes=max_body_preview_bytes,
+                screenshot_dir=screenshot_dir,
+            )
+        )
+
     return ToolRegistry(tools)
