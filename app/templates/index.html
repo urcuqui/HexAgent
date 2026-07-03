@@ -32,6 +32,11 @@
         <span>--enable-nmap <em>(registers the real nmap_scan tool)</em></span>
       </label>
 
+      <label class="toggle" id="playwright-toggle">
+        <input type="checkbox" name="enable_playwright" id="playwright-checkbox">
+        <span>--enable-playwright <em>(real Playwright/Chromium browser exploration)</em></span>
+      </label>
+
       <label class="toggle">
         <input type="checkbox" name="human_approval">
         <span>--human-approval <em>(pause for review before the final report)</em></span>
@@ -39,13 +44,30 @@
 
       <label class="toggle">
         <input type="checkbox" name="require_sensitive_approval">
-        <span>--require-sensitive-approval <em>(pause before http_post / nmap_scan)</em></span>
+        <span>--require-sensitive-approval <em>(pause before http_post / nmap_scan / browser_login)</em></span>
       </label>
     </div>
 
     <p id="nmap-warning" class="warning hidden">
       &#9888; nmap_scan performs a real scan. Only ever target hosts you own or are explicitly authorised to test.
     </p>
+
+    <div id="playwright-section" class="playwright-section hidden">
+      <p class="warning">
+        &#9888; Playwright opens a real browser. Only target hosts you own or are explicitly authorised to test.
+        Requires: <code class="inline-code">pip install playwright &amp;&amp; playwright install chromium</code>
+      </p>
+      <div class="credentials-grid">
+        <label class="field">
+          <span class="field-label">Lab username <em>(optional &mdash; for browser_login)</em></span>
+          <input type="text" name="browser_username" placeholder="admin" autocomplete="off">
+        </label>
+        <label class="field">
+          <span class="field-label">Lab password <em>(stored in-memory; never sent to LLM)</em></span>
+          <input type="password" name="browser_password" placeholder="••••••" autocomplete="new-password">
+        </label>
+      </div>
+    </div>
 
     <button type="submit" class="btn-launch">Launch run</button>
     <p id="launch-error" class="error hidden"></p>

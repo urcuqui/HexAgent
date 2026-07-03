@@ -198,10 +198,24 @@ class BrowserManager:
         self._network_events: list[CapturedRequest] = []
         self._active = False
 
+        # Lab credentials stored here so they never appear in plan step args
+        # or tool results (i.e. never reach the LLM context).
+        self._default_username: str = ""
+        self._default_password: str = ""
+
     @property
     def active(self) -> bool:
         """True when a Playwright instance is running."""
         return self._active
+
+    def set_credentials(self, username: str, password: str) -> None:
+        """Store lab credentials for use by :class:`BrowserLoginTool`.
+
+        Credentials are held here — not in plan step arguments — so they are
+        never serialised into the LLM context or written to logs.
+        """
+        self._default_username = username
+        self._default_password = password
 
     def get_page(self) -> Any:  # -> Page
         """Return the current page, starting Playwright lazily if needed."""
@@ -587,6 +601,10 @@ class BrowserLoginTool(BaseTool):
     ) -> ToolResult:
         if not PLAYWRIGHT_AVAILABLE:
             return ToolResult.fail(self.name, "Playwright not installed.")
+        # Fall back to manager-stored lab credentials when none are passed via args.
+        # This prevents credentials from ever appearing in plan step arguments.
+        username = username or self._mgr._default_username
+        password = password or self._mgr._default_password
         if not username or not password:
             return ToolResult.fail(self.name, "Both username and password are required.")
 

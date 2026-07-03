@@ -27,6 +27,7 @@ def offline_settings(tmp_path) -> Settings:
         openai_api_key=None,
         mock_mode=True,
         enable_nmap=False,
+        enable_playwright=False,
         require_sensitive_approval=False,
         max_iterations=12,
         require_human_approval=False,

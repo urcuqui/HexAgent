@@ -20,11 +20,12 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import markdown
 import nh3
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from app.agents.specialists import ApprovalCallback
 from app.config import Settings
@@ -174,6 +175,21 @@ def _translate_event(node_name: str, update: dict[str, Any]) -> dict[str, Any]:
                     "duration_ms": result.duration_ms,
                 }
             )
+            # Attach browser-specific fields when a browser tool ran.
+            if result.tool_name.startswith("browser_"):
+                data = result.data or {}
+                event["browser_tool"] = True
+                event["current_url"] = data.get("current_url")
+                event["page_title"] = data.get("title")
+                screenshot_path = data.get("screenshot_path")
+                if screenshot_path:
+                    event["screenshot_filename"] = Path(screenshot_path).name
+                event["forms_count"] = len(data.get("forms") or [])
+                event["links_count"] = len(data.get("links") or [])
+                event["network_count"] = len(data.get("network_requests") or [])
+                event["api_endpoints"] = (data.get("potential_api_endpoints") or [])[:10]
+                event["auth_indicators"] = data.get("auth_indicators") or []
+                event["browser_success"] = bool(data.get("success", True))
         else:
             history = update.get("reasoning_history") or []
             event["message"] = history[-1] if history else "no runnable step"
@@ -243,9 +259,14 @@ def start_run():
     except ValueError:
         max_iterations = 12
 
+    enable_playwright = bool(form.get("enable_playwright"))
+    browser_username = (form.get("browser_username") or "").strip()
+    browser_password = form.get("browser_password") or ""
+
     settings = Settings(
         mock_mode=bool(form.get("mock")),
         enable_nmap=bool(form.get("enable_nmap")),
+        enable_playwright=enable_playwright,
         max_iterations=max_iterations,
         require_human_approval=bool(form.get("human_approval")),
         require_sensitive_approval=bool(form.get("require_sensitive_approval")),
@@ -254,7 +275,18 @@ def start_run():
     session = RunSession(run_id=uuid.uuid4().hex)
     RUNS[session.run_id] = session
 
-    registry = default_registry(enable_nmap=settings.enable_nmap)
+    registry = default_registry(
+        enable_nmap=settings.enable_nmap,
+        enable_playwright=settings.enable_playwright,
+        settings=settings,
+    )
+    # Inject lab credentials into the shared BrowserManager so they never
+    # appear in plan step arguments or LLM context.
+    if enable_playwright and browser_username:
+        login_tool = registry.get("browser_login")
+        if login_tool is not None and hasattr(login_tool, "_mgr"):
+            login_tool._mgr.set_credentials(browser_username, browser_password)  # type: ignore[union-attr]
+
     nodes = build_nodes(registry, settings, _make_approval_callback(session))
     graph = build_workflow(nodes)
 
@@ -337,6 +369,15 @@ def approve(run_id: str):
 
     gate.set()
     return jsonify({"ok": True, "approved": approved})
+
+
+@app.get("/screenshots/<filename>")
+def serve_screenshot(filename: str):
+    """Serve a browser evidence screenshot (PNG only, no path traversal)."""
+    if not filename.endswith(".png") or "/" in filename or ".." in filename:
+        return jsonify({"error": "invalid filename"}), 400
+    screenshot_dir = (Path.cwd() / "reports" / "screenshots").resolve()
+    return send_from_directory(str(screenshot_dir), filename)
 
 
 def main(argv: list[str] | None = None) -> int:

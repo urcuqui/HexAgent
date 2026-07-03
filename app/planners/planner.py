@@ -212,12 +212,36 @@ class LLMPlanner(BasePlanner):
             data = extract_json(text)
             plan = self._plan_from_dict(objective, target, data)
             if plan.steps:
-                return plan
+                return self._inject_browser_phase(plan, target)
         except Exception as exc:  # noqa: BLE001 - fall back gracefully
             logger.warning("LLM planning failed (%s); using heuristic plan", exc)
             if text is not None:
                 logger.debug("Raw LLM planner output was: %r", text)
         return self._fallback.create_plan(objective, target)
+
+    def _inject_browser_phase(self, plan: Plan, target: str) -> Plan:
+        """Append browser phase steps when registered but omitted by the LLM."""
+        if self._registry.get("browser_open") is None:
+            return plan
+        if any(s.tool_name == "browser_open" for s in plan.steps):
+            return plan  # LLM already included them
+        browser_steps = [
+            PlanStep(
+                id=f"s{len(plan.steps) + i + 1}",
+                description=desc,
+                tool_name=tool,
+                arguments={"target": target},
+            )
+            for i, (desc, tool) in enumerate(_BROWSER_PHASE_STEPS)
+            if self._registry.get(tool) is not None
+        ]
+        if not browser_steps:
+            return plan
+        logger.info(
+            "LLM plan omitted browser phase; injecting %d browser step(s).", len(browser_steps)
+        )
+        plan.rationale = (plan.rationale or "") + " [browser phase injected]"
+        return HeuristicPlanner._insert_before_summary(plan, browser_steps)
 
     def replan(
         self,

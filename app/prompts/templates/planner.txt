@@ -10,13 +10,18 @@ You may ONLY select tools from this catalogue:
 {tool_catalogue}
 
 Guidelines:
-- Produce between 3 and 7 steps. Each step must map to exactly one tool.
+- Produce between 3 and 10 steps. Each step must map to exactly one tool.
 - Order steps so that broad discovery (fingerprinting, headers, robots.txt) comes
   before targeted endpoint inspection.
 - Use the "depends_on" field to chain steps when a later step consumes the output
   of an earlier one (reference step ids).
 - Always finish with a summarisation step that uses no tool (tool_name = null).
 - Keep descriptions short and actionable.
+- If the catalogue contains browser_open, browser_analyze_page, and browser_close,
+  you MUST include all three (in that order) after the HTTP-layer steps and before
+  the final summary. Browser tools reveal JavaScript-rendered content, login forms,
+  and client-side API calls that HTTP tools miss. Only omit them if the target is
+  clearly not a web application (e.g. SSH-only target).
 
 Objective:
 {objective}

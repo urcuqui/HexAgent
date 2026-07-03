@@ -14,6 +14,16 @@
     nmapToggle.addEventListener("change", syncNmapWarning);
     syncNmapWarning();
 
+    const playwrightCheckbox = document.getElementById("playwright-checkbox");
+    const playwrightSection = document.getElementById("playwright-section");
+    if (playwrightCheckbox && playwrightSection) {
+      const syncPlaywright = () => {
+        playwrightSection.classList.toggle("hidden", !playwrightCheckbox.checked);
+      };
+      playwrightCheckbox.addEventListener("change", syncPlaywright);
+      syncPlaywright();
+    }
+
     const errorEl = document.getElementById("launch-error");
     const launchBtn = form.querySelector(".btn-launch");
 
@@ -44,6 +54,12 @@
     return div.innerHTML;
   }
 
+  // Browser tool names for log styling.
+  const BROWSER_TOOLS = new Set([
+    "browser_open", "browser_analyze_page", "browser_login",
+    "browser_click", "browser_screenshot", "browser_close",
+  ]);
+
   function describeEvent(event) {
     switch (event.type) {
       case "start":
@@ -54,6 +70,9 @@
         return `replanned (now ${event.step_count} step(s)) — ${event.rationale || ""}`;
       case "execute":
         if (event.tool_name) {
+          if (event.browser_tool) {
+            return describeBrowserExecute(event);
+          }
           return `${event.tool_name} -> ${event.status} — ${event.summary}`;
         }
         return event.message || "execute step";
@@ -80,6 +99,22 @@
     }
   }
 
+  function describeBrowserExecute(event) {
+    const ok = event.browser_success !== false;
+    const icon = ok ? "🌐" : "✖";
+    let desc = `${icon} ${event.tool_name} -> ${event.status}`;
+    if (event.current_url) desc += ` | ${event.current_url}`;
+    if (event.page_title) desc += ` (${event.page_title})`;
+    const parts = [];
+    if (event.links_count) parts.push(`${event.links_count} link(s)`);
+    if (event.forms_count) parts.push(`${event.forms_count} form(s)`);
+    if (event.network_count) parts.push(`${event.network_count} req(s) captured`);
+    if ((event.api_endpoints || []).length) parts.push(`${event.api_endpoints.length} API hint(s)`);
+    if (parts.length) desc += " | " + parts.join(", ");
+    if (event.screenshot_filename) desc += ` | 📷 ${event.screenshot_filename}`;
+    return desc;
+  }
+
   function initRunView() {
     const view = document.getElementById("run-view");
     if (!view) return;
@@ -96,6 +131,15 @@
     const reportRaw = document.getElementById("report-raw");
     const toggleRawBtn = document.getElementById("btn-toggle-raw");
 
+    // Browser panel elements (may be absent in older templates).
+    const browserPanel = document.getElementById("browser-panel");
+    const browserStatusDot = document.getElementById("browser-status-dot");
+    const browserStatusLabel = document.getElementById("browser-status-label");
+    const browserUrlEl = document.getElementById("browser-url");
+    const browserApiList = document.getElementById("browser-api-list");
+    const screenshotGallery = document.getElementById("screenshot-gallery");
+    const seenScreenshots = new Set();
+
     toggleRawBtn.addEventListener("click", () => {
       const showingRaw = !reportRaw.classList.contains("hidden");
       reportRaw.classList.toggle("hidden", showingRaw);
@@ -110,7 +154,9 @@
 
     function appendLog(event) {
       const line = document.createElement("div");
-      line.className = "log-line type-" + event.type;
+      let cls = "log-line type-" + event.type;
+      if (event.type === "execute" && event.browser_tool) cls += " browser-event";
+      line.className = cls;
       line.innerHTML = '<span class="tag">[' + event.type + "]</span> " + escapeHtml(describeEvent(event));
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
@@ -129,6 +175,43 @@
           '<span class="sev sev-' + f.severity + '">' + f.severity + "</span>" + escapeHtml(f.title);
         findingsList.appendChild(li);
       });
+    }
+
+    function updateBrowserPanel(event) {
+      if (!browserPanel) return;
+      browserPanel.classList.remove("hidden");
+
+      const active = event.tool_name !== "browser_close" && event.browser_success !== false;
+      if (browserStatusDot) browserStatusDot.classList.toggle("active", active);
+      if (browserStatusLabel) browserStatusLabel.textContent = active ? "active" : "closed";
+
+      if (event.current_url && browserUrlEl) {
+        browserUrlEl.textContent = event.current_url;
+      }
+
+      const endpoints = event.api_endpoints || [];
+      if (endpoints.length && browserApiList) {
+        browserApiList.innerHTML = endpoints
+          .map((ep) => '<div class="browser-api-item">' + escapeHtml(ep) + "</div>")
+          .join("");
+      }
+
+      if (event.screenshot_filename) addScreenshot(event.screenshot_filename);
+    }
+
+    function addScreenshot(filename) {
+      if (!screenshotGallery || seenScreenshots.has(filename)) return;
+      seenScreenshots.add(filename);
+      const anchor = document.createElement("a");
+      anchor.href = "/screenshots/" + encodeURIComponent(filename);
+      anchor.target = "_blank";
+      anchor.title = filename;
+      const img = document.createElement("img");
+      img.src = "/screenshots/" + encodeURIComponent(filename);
+      img.alt = filename;
+      img.className = "screenshot-thumb";
+      anchor.appendChild(img);
+      screenshotGallery.appendChild(anchor);
     }
 
     function showApproval(event) {
@@ -164,6 +247,8 @@
 
       if (event.type === "start") {
         runMeta.textContent = 'objective="' + event.objective + '"  target="' + event.target + '"';
+      } else if (event.type === "execute" && event.browser_tool) {
+        updateBrowserPanel(event);
       } else if (event.type === "evaluate" && event.findings) {
         renderFindings(event.findings);
       } else if (event.type === "approval_requested") {
