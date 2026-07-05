@@ -59,9 +59,10 @@ class ToolRegistry:
 def default_registry(
     enable_nmap: bool = False,
     enable_playwright: bool = False,
+    mock_mode: bool = True,
     settings: object | None = None,
 ) -> ToolRegistry:
-    """Build a registry pre-populated with all built-in mock tools.
+    """Build a registry pre-populated with HTTP and reconnaissance tools.
 
     Args:
         enable_nmap: When ``True``, also register :class:`NmapScanTool`, which
@@ -71,23 +72,44 @@ def default_registry(
         enable_playwright: When ``True``, register the six Playwright browser
             tools. Playwright must be installed (``pip install playwright &&
             playwright install chromium``). Off by default.
+        mock_mode: When ``True`` (default), use simulated/deterministic tools
+            that make no network requests.  When ``False``, use real tools that
+            make actual HTTP requests — suitable for authorised lab targets.
         settings: Optional :class:`~app.config.Settings` instance used to
             configure the Playwright browser tools (headless, timeouts, …).
             Ignored when ``enable_playwright`` is ``False``.
     """
+    # Infer mock_mode from settings when not passed explicitly.
+    if settings is not None:
+        mock_mode = getattr(settings, "mock_mode", mock_mode)
+
     # Imported here to avoid a circular import at module load time.
-    from app.tools.http_tools import (
-        HeaderInspectionTool,
-        HttpGetTool,
-        HttpPostTool,
-    )
+    if mock_mode:
+        from app.tools.http_tools import (
+            HeaderInspectionTool,
+            HttpGetTool,
+            HttpPostTool,
+        )
+        from app.tools.recon_tools import (
+            CrawlerTool,
+            RobotsTxtTool,
+            SecurityHeadersTool,
+            TechFingerprintTool,
+        )
+    else:
+        from app.tools.live_http_tools import (  # type: ignore[assignment]
+            CrawlerTool,
+            HeaderInspectionTool,
+            HttpGetTool,
+            RobotsTxtTool,
+            SecurityHeadersTool,
+            TechFingerprintTool,
+        )
+        from app.tools.http_tools import HttpPostTool  # POST stays mock (non-exploitative)
+
+        logger.info("Using real HTTP tools (mock_mode=False)")
+
     from app.tools.network_tools import PortScanTool
-    from app.tools.recon_tools import (
-        CrawlerTool,
-        RobotsTxtTool,
-        SecurityHeadersTool,
-        TechFingerprintTool,
-    )
 
     tools: list[BaseTool] = [
         HttpGetTool(),
