@@ -50,6 +50,23 @@ class Settings(BaseSettings):
     # Real tools (off by default; only use against explicitly authorised targets).
     enable_nmap: bool = Field(default=False, alias="HEXAGENT_ENABLE_NMAP")
     enable_playwright: bool = Field(default=False, alias="HEXAGENT_ENABLE_PLAYWRIGHT")
+    enable_nuclei: bool = Field(default=False, alias="HEXAGENT_ENABLE_NUCLEI")
+
+    # Nuclei settings (only used when enable_nuclei=True). Tag/severity names
+    # follow ALLOWED_DEFAULT_TAGS/ALLOWED_SEVERITIES in app/tools/nuclei_tool.py.
+    nuclei_binary: str = Field(default="nuclei", alias="NUCLEI_BINARY")
+    nuclei_templates_dir: str | None = Field(default=None, alias="NUCLEI_TEMPLATES_DIR")
+    nuclei_default_tags: str = Field(
+        default="exposure,misconfig,headers,tech,panel,files,tokens", alias="NUCLEI_DEFAULT_TAGS"
+    )
+    nuclei_default_severity: str = Field(default="info,low,medium", alias="NUCLEI_DEFAULT_SEVERITY")
+    nuclei_allow_high: bool = Field(default=False, alias="NUCLEI_ALLOW_HIGH")
+    nuclei_allow_critical: bool = Field(default=False, alias="NUCLEI_ALLOW_CRITICAL")
+    nuclei_rate_limit: int = Field(default=5, alias="NUCLEI_RATE_LIMIT")
+    nuclei_timeout_seconds: int = Field(default=120, alias="NUCLEI_TIMEOUT_SECONDS")
+    nuclei_max_targets: int = Field(default=20, alias="NUCLEI_MAX_TARGETS")
+    nuclei_max_results: int = Field(default=100, alias="NUCLEI_MAX_RESULTS")
+    nuclei_update_templates: bool = Field(default=False, alias="NUCLEI_UPDATE_TEMPLATES")
 
     # Playwright browser settings (only used when enable_playwright=True).
     playwright_headless: bool = Field(default=True, alias="PLAYWRIGHT_HEADLESS")

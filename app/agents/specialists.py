@@ -46,7 +46,11 @@ class SpecialistAgent:
         if tool is None:
             return ToolResult.fail(call.tool_name, f"Unknown tool '{call.tool_name}'")
 
-        if self._require_sensitive_approval and tool.sensitive and not self._approved(call):
+        if (
+            self._require_sensitive_approval
+            and tool.is_call_sensitive(**call.arguments)
+            and not self._approved(call)
+        ):
             logger.info("Sensitive action '%s' not approved; skipping", call.tool_name)
             return ToolResult.skipped(
                 call.tool_name, "requires human approval, which was not granted"
@@ -76,6 +80,9 @@ class ReconAgent(SpecialistAgent):
             "robots_txt",
             "url_crawler",
             "security_headers",
+            "nuclei_scan_url",
+            "nuclei_scan_urls",
+            "nuclei_check_installation",
         }
     )
 

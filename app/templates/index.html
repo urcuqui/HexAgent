@@ -37,6 +37,11 @@
         <span>--enable-playwright <em>(real Playwright/Chromium browser exploration)</em></span>
       </label>
 
+      <label class="toggle" id="nuclei-toggle">
+        <input type="checkbox" name="enable_nuclei">
+        <span>--enable-nuclei <em>(safe-default template scan; candidates only, validated via http_get)</em></span>
+      </label>
+
       <label class="toggle">
         <input type="checkbox" name="human_approval">
         <span>--human-approval <em>(pause for review before the final report)</em></span>
@@ -44,12 +49,18 @@
 
       <label class="toggle">
         <input type="checkbox" name="require_sensitive_approval">
-        <span>--require-sensitive-approval <em>(pause before http_post / nmap_scan / browser_login)</em></span>
+        <span>--require-sensitive-approval <em>(pause before http_post / nmap_scan / browser_login / an escalated nuclei_scan_url call)</em></span>
       </label>
     </div>
 
     <p id="nmap-warning" class="warning hidden">
       &#9888; nmap_scan performs a real scan. Only ever target hosts you own or are explicitly authorised to test.
+    </p>
+
+    <p id="nuclei-warning" class="warning hidden">
+      &#9888; nuclei_scan_url performs a real template-based scan (safe-default profile only, unless approved).
+      Only ever target hosts you own or are explicitly authorised to test. Requires the
+      <code class="inline-code">nuclei</code> binary on PATH.
     </p>
 
     <div id="playwright-section" class="playwright-section hidden">

@@ -92,6 +92,30 @@ def test_mock_run_completes(client):
     assert any(e["type"] == "execute" and e.get("tool_name") == "port_scan" for e in session.events)
 
 
+def test_nuclei_disabled_by_default_in_web_ui(client):
+    run_id = _start_mock_run(client)
+    session = _wait_for_status(run_id, {"completed", "error"})
+    assert session.status == "completed"
+    assert not any(e.get("tool_name") == "nuclei_scan_url" for e in session.events)
+
+
+def test_enable_nuclei_form_field_registers_and_runs_the_tool(client):
+    # Regression test: start_run() must forward enable_nuclei into both
+    # Settings and default_registry(), the same way it already does for
+    # enable_nmap/enable_playwright -- without that wiring, ticking the
+    # "--enable-nuclei" checkbox in the UI silently had no effect. The nuclei
+    # binary need not be installed here: a missing binary still produces an
+    # "execute" event for nuclei_scan_url (status=error), which is enough to
+    # prove the tool was registered and selected by the planner.
+    run_id = _start_mock_run(client, enable_nuclei="on")
+    session = _wait_for_status(run_id, {"completed", "error"})
+    assert session.status == "completed"
+    ran_nuclei = any(
+        e["type"] == "execute" and e.get("tool_name") == "nuclei_scan_url" for e in session.events
+    )
+    assert ran_nuclei
+
+
 def test_report_html_is_sanitised_against_malicious_objective(client):
     # objective/target flow verbatim into the report; the rendered HTML must
     # never let raw script/event-handler markup through.

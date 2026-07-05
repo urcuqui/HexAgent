@@ -14,6 +14,16 @@
     nmapToggle.addEventListener("change", syncNmapWarning);
     syncNmapWarning();
 
+    const nucleiToggle = form.querySelector('input[name="enable_nuclei"]');
+    const nucleiWarning = document.getElementById("nuclei-warning");
+    if (nucleiToggle && nucleiWarning) {
+      const syncNucleiWarning = () => {
+        nucleiWarning.classList.toggle("hidden", !nucleiToggle.checked);
+      };
+      nucleiToggle.addEventListener("change", syncNucleiWarning);
+      syncNucleiWarning();
+    }
+
     const playwrightCheckbox = document.getElementById("playwright-checkbox");
     const playwrightSection = document.getElementById("playwright-section");
     if (playwrightCheckbox && playwrightSection) {

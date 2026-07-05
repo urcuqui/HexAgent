@@ -78,6 +78,7 @@ def build_nodes(
     registry = registry or default_registry(
         enable_nmap=settings.enable_nmap,
         enable_playwright=settings.enable_playwright,
+        enable_nuclei=settings.enable_nuclei,
         settings=settings,
     )
     llm = build_llm(settings)

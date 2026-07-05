@@ -35,6 +35,7 @@ class ReplanReason(StrEnum):
     ROBOTS_PATHS_FOUND = "robots_paths_found"
     LOGIN_ENDPOINT_FOUND = "login_endpoint_found"
     BROWSER_LOGIN_FORM_FOUND = "browser_login_form_found"
+    NUCLEI_CANDIDATE_FOUND = "nuclei_candidate_found"
 
 
 class PlanStep(BaseModel):

@@ -59,6 +59,7 @@ class ToolRegistry:
 def default_registry(
     enable_nmap: bool = False,
     enable_playwright: bool = False,
+    enable_nuclei: bool = False,
     mock_mode: bool = True,
     settings: object | None = None,
 ) -> ToolRegistry:
@@ -72,12 +73,17 @@ def default_registry(
         enable_playwright: When ``True``, register the six Playwright browser
             tools. Playwright must be installed (``pip install playwright &&
             playwright install chromium``). Off by default.
+        enable_nuclei: When ``True``, also register the real
+            ``nuclei_scan_url``/``nuclei_scan_urls``/``nuclei_check_installation``
+            tools, which shell out to a local ``nuclei`` binary. Off by default;
+            wire it to ``Settings.enable_nuclei`` to opt in.
         mock_mode: When ``True`` (default), use simulated/deterministic tools
             that make no network requests.  When ``False``, use real tools that
             make actual HTTP requests — suitable for authorised lab targets.
         settings: Optional :class:`~app.config.Settings` instance used to
-            configure the Playwright browser tools (headless, timeouts, …).
-            Ignored when ``enable_playwright`` is ``False``.
+            configure the Playwright browser tools (headless, timeouts, …) and
+            the Nuclei tools (binary, templates dir, safe-default profile, …).
+            Ignored for a given tool family when it isn't enabled.
     """
     # Infer mock_mode from settings when not passed explicitly.
     if settings is not None:
@@ -125,6 +131,39 @@ def default_registry(
         from app.tools.nmap_tool import NmapScanTool
 
         tools.append(NmapScanTool())
+
+    if enable_nuclei:
+        from app.tools.nuclei_tool import (
+            ALLOWED_DEFAULT_TAGS,
+            ALLOWED_SEVERITIES,
+            NucleiCheckInstallationTool,
+            NucleiScanUrlsTool,
+            NucleiScanUrlTool,
+        )
+
+        nuclei_kwargs: dict[str, object] = {}
+        if settings is not None:
+            nuclei_kwargs = dict(
+                binary=getattr(settings, "nuclei_binary", "nuclei"),
+                templates_dir=getattr(settings, "nuclei_templates_dir", None),
+                default_tags=set(getattr(settings, "nuclei_default_tags", "").split(","))
+                if getattr(settings, "nuclei_default_tags", None)
+                else set(ALLOWED_DEFAULT_TAGS),
+                default_severity=set(getattr(settings, "nuclei_default_severity", "").split(","))
+                if getattr(settings, "nuclei_default_severity", None)
+                else set(ALLOWED_SEVERITIES),
+                allow_high=getattr(settings, "nuclei_allow_high", False),
+                allow_critical=getattr(settings, "nuclei_allow_critical", False),
+                rate_limit=getattr(settings, "nuclei_rate_limit", 5),
+                timeout=getattr(settings, "nuclei_timeout_seconds", 120),
+                max_results=getattr(settings, "nuclei_max_results", 100),
+            )
+        binary = nuclei_kwargs.get("binary", "nuclei")
+        max_targets = getattr(settings, "nuclei_max_targets", 20) if settings is not None else 20
+
+        tools.append(NucleiScanUrlTool(**nuclei_kwargs))
+        tools.append(NucleiScanUrlsTool(**nuclei_kwargs, max_targets=max_targets))
+        tools.append(NucleiCheckInstallationTool(binary=binary))
 
     if enable_playwright:
         from pathlib import Path

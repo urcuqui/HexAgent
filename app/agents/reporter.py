@@ -107,9 +107,14 @@ class ReporterAgent:
 
     @staticmethod
     def _finding_block(f: Finding) -> str:
+        # validation_status distinguishes scanner-sourced candidates (e.g. from
+        # Nuclei) from validated/false-positive/informational outcomes and
+        # everything else (None -> no badge, unchanged report format).
+        status_badge = f" `{f.validation_status.upper()}`" if f.validation_status else ""
         flag = " ⚠️ _human validation required_" if f.requires_human_validation else ""
         rec = f"\n- **Recommendation:** {f.recommendation}" if f.recommendation else ""
-        return f"### [{f.severity.value.upper()}] {f.title}{flag}\n\n{f.description}{rec}"
+        header = f"### [{f.severity.value.upper()}] {f.title}{status_badge}{flag}"
+        return f"{header}\n\n{f.description}{rec}"
 
     @staticmethod
     def _list_section(title: str, items: list[str]) -> str:

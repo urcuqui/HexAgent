@@ -43,3 +43,12 @@ class Finding(BaseModel):
         default=False,
         description="True when a human should confirm before any follow-up action.",
     )
+    validation_status: str | None = Field(
+        default=None,
+        description=(
+            "Lifecycle of a scanner-sourced candidate finding: candidate, "
+            "needs_validation, validated, false_positive, out_of_scope or "
+            "informational. None for findings that don't originate from a "
+            "candidate-producing tool (e.g. Nuclei) and are reported as-is."
+        ),
+    )

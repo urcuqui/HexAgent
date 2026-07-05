@@ -270,6 +270,7 @@ def start_run():
         mock_mode=bool(form.get("mock")),
         enable_nmap=bool(form.get("enable_nmap")),
         enable_playwright=enable_playwright,
+        enable_nuclei=bool(form.get("enable_nuclei")),
         max_iterations=max_iterations,
         require_human_approval=bool(form.get("human_approval")),
         require_sensitive_approval=bool(form.get("require_sensitive_approval")),
@@ -281,6 +282,7 @@ def start_run():
     registry = default_registry(
         enable_nmap=settings.enable_nmap,
         enable_playwright=settings.enable_playwright,
+        enable_nuclei=settings.enable_nuclei,
         settings=settings,
     )
     # Inject lab credentials into the shared BrowserManager so they never

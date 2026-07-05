@@ -59,6 +59,17 @@ class BaseTool(ABC):
         result.duration_ms = round((time.perf_counter() - start) * 1000, 2)
         return result
 
+    def is_call_sensitive(self, **kwargs: Any) -> bool:
+        """Whether *this specific call* should be gated behind approval.
+
+        Defaults to the static ``sensitive`` flag. Tools whose risk depends on
+        the arguments (e.g. Nuclei escalating from a safe default profile to
+        custom templates/high severity) override this so the same approval gate
+        in :mod:`app.agents.specialists` can be call-aware without a second
+        approval mechanism.
+        """
+        return self.sensitive
+
     def catalogue_entry(self) -> str:
         """Return a one-line catalogue description including its arguments."""
         args = ", ".join(f"{k} ({v})" for k, v in self.argument_help.items()) or "none"

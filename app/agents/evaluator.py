@@ -6,6 +6,7 @@ the tool name so the POC produces meaningful, educational findings offline.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -24,6 +25,27 @@ logger = get_logger(__name__)
 _WEB_PORTS = {80, 443}
 # Ports the evaluator flags as sensitive regardless of the HTTP-layer decision.
 _SENSITIVE_PORTS = {22, 3306}
+
+# Matches the step description HeuristicPlanner._on_nuclei_candidate() creates,
+# so the http_get result it produces can be linked back to the Nuclei
+# template that triggered it -- see the "candidate -> validate -> confirm"
+# handling of the nuclei_scan_url/nuclei_scan_urls branch below.
+_NUCLEI_VALIDATION_RE = re.compile(r"^Validate Nuclei candidate \(([^)]+)\)")
+
+
+def _classify_nuclei_validation(
+    status_code: int | None, url: str
+) -> tuple[str, Severity, str, bool, str]:
+    """Map an http_get validation response to (status, severity, verb, human, detail)."""
+    if status_code == 200:
+        return "validated", Severity.MEDIUM, "Validated", True, f"confirmed reachable at {url}"
+    if status_code in (401, 403):
+        detail = f"requires authentication at {url} (HTTP {status_code}); not exploitable"
+        return "false_positive", Severity.INFO, "False positive", False, detail
+    if status_code == 404:
+        return "false_positive", Severity.INFO, "False positive", False, f"not present at {url}"
+    detail = f"returned HTTP {status_code} at {url}; manual review needed"
+    return "needs_validation", Severity.INFO, "Inconclusive", True, detail
 
 
 class EvaluationResult(BaseModel):
@@ -108,6 +130,23 @@ class EvaluatorAgent:
                 human=True,
             )
 
+        if result.tool_name == "http_get" and step is not None:
+            match = _NUCLEI_VALIDATION_RE.match(step.description)
+            if match:
+                template_id = match.group(1)
+                status_code = data.get("status_code")
+                url = data.get("url") or step.arguments.get("path", "")
+                outcome, sev, verb, human, detail = _classify_nuclei_validation(status_code, url)
+                add(
+                    f"{verb}: Nuclei candidate {template_id}",
+                    sev,
+                    f"Nuclei candidate '{template_id}' {detail}.",
+                    "Review the validation evidence and remediate if applicable.",
+                    human=human,
+                )
+                findings[-1].evidence = [url, f"status_code={status_code}", template_id]
+                findings[-1].validation_status = outcome
+
         if result.tool_name == "security_headers" and data.get("missing"):
             missing = ", ".join(data["missing"])
             add(
@@ -161,6 +200,51 @@ class EvaluatorAgent:
             if open_ports & _WEB_PORTS:
                 needs_replan = True
                 reason = ReplanReason.OPEN_WEB_PORTS_FOUND
+
+        if result.tool_name in ("nuclei_scan_url", "nuclei_scan_urls"):
+            skipped = data.get("targets_skipped") or []
+            if skipped:
+                obs.append(
+                    Observation(
+                        source_tool=result.tool_name,
+                        step_id=step.id if step else None,
+                        content=f"Nuclei skipped {len(skipped)} out-of-scope/oversized target(s).",
+                    )
+                )
+            nuclei_findings = data.get("findings") or []
+            for nf in nuclei_findings:
+                template_id = nf.get("template_id") or "unknown-template"
+                matched_at = nf.get("matched_at") or "unknown URL"
+                try:
+                    sev = Severity(str(nf.get("severity") or "info").lower())
+                except ValueError:
+                    sev = Severity.INFO
+                obs.append(
+                    Observation(
+                        source_tool=result.tool_name,
+                        step_id=step.id if step else None,
+                        content=f"Nuclei candidate [{template_id}] at {matched_at}.",
+                    )
+                )
+                # Nuclei output is always a candidate observation, never an
+                # auto-confirmed vulnerability: validation_status="candidate"
+                # and requires_human_validation for anything above medium.
+                add(
+                    f"Candidate: {nf.get('template_name') or template_id}",
+                    sev,
+                    (
+                        f"Nuclei template '{template_id}' matched at {matched_at}. "
+                        f"{nf.get('description') or ''} This is an unverified candidate; "
+                        "validate with http_get before treating it as confirmed."
+                    ).strip(),
+                    f"Validate {matched_at} with the HTTP tool to confirm or rule out.",
+                    human=sev in (Severity.HIGH, Severity.CRITICAL),
+                )
+                findings[-1].evidence = [matched_at, template_id]
+                findings[-1].validation_status = "candidate"
+            if nuclei_findings:
+                needs_replan = True
+                reason = ReplanReason.NUCLEI_CANDIDATE_FOUND
 
         # -- Browser tool heuristics ------------------------------------------
         new_screenshots: list[str] = []

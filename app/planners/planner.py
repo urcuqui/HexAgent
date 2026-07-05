@@ -45,6 +45,14 @@ _BROWSER_PHASE_STEPS: list[tuple[str, str]] = [
     ("Close browser session", "browser_close"),
 ]
 
+# Nuclei step queued once the HTTP phase is confirmed useful (open web port).
+# Uses the tool's own safe-default profile -- listed explicitly here only so
+# the rendered plan/report show what will run.
+_NUCLEI_PHASE_STEP = (
+    "Run safe-default Nuclei template scan for candidate misconfigurations",
+    "nuclei_scan_url",
+)
+
 
 class HeuristicPlanner(BasePlanner):
     """Deterministic planner that reacts to results instead of front-loading
@@ -88,6 +96,8 @@ class HeuristicPlanner(BasePlanner):
             return self._on_login_endpoint(plan, last_result)
         if reason == ReplanReason.BROWSER_LOGIN_FORM_FOUND:
             return self._on_browser_login_form(plan, last_result)
+        if reason == ReplanReason.NUCLEI_CANDIDATE_FOUND:
+            return self._on_nuclei_candidate(plan, last_result)
         return plan
 
     def _on_open_web_ports(self, plan: Plan, result: ToolResult) -> Plan:
@@ -120,9 +130,28 @@ class HeuristicPlanner(BasePlanner):
             for i, (desc, tool) in enumerate(_BROWSER_PHASE_STEPS)
             if self._registry.get(tool) is not None
         ]
-        all_new = new_steps + browser_steps
+        # Add a Nuclei candidate-discovery step when it's registered.
+        nuclei_desc, nuclei_tool = _NUCLEI_PHASE_STEP
+        nuclei_steps = (
+            [
+                PlanStep(
+                    id=f"s{len(plan.steps) + len(new_steps) + len(browser_steps) + 1}",
+                    description=nuclei_desc,
+                    tool_name=nuclei_tool,
+                    arguments={"target": target},
+                )
+            ]
+            if self._registry.get(nuclei_tool) is not None
+            else []
+        )
+        all_new = new_steps + browser_steps + nuclei_steps
+        extras = []
+        if browser_steps:
+            extras.append("browser exploration")
+        if nuclei_steps:
+            extras.append("a Nuclei candidate scan")
         plan.rationale = "Open web port(s) found; queued HTTP-layer analysis" + (
-            " and browser exploration." if browser_steps else "."
+            f" and {', '.join(extras)}." if extras else "."
         )
         return self._insert_before_summary(plan, all_new)
 
@@ -175,6 +204,34 @@ class HeuristicPlanner(BasePlanner):
             arguments={"target": target, "url": login_url},
         )
         plan.rationale = "Login form detected in browser; queued browser_login."
+        return self._insert_before_summary(plan, [step])
+
+    def _on_nuclei_candidate(self, plan: Plan, result: ToolResult) -> Plan:
+        """Queue an http_get validation step for the top Nuclei candidate.
+
+        Nuclei findings are never auto-confirmed (see EvaluatorAgent): the
+        planner is what decides to hand the matched URL to the existing HTTP
+        tool for confirmation, exactly as the design brief's candidate ->
+        validate -> confirm loop requires.
+        """
+        findings = result.data.get("findings") or []
+        if not findings:
+            return plan
+        matched_at = findings[0].get("matched_at")
+        if not matched_at:
+            return plan
+        path = urlparse(matched_at).path or "/"
+        if any(s.tool_name == "http_get" and s.arguments.get("path") == path for s in plan.steps):
+            return plan  # already queued
+        target = self._target_from_plan(plan)
+        template_id = findings[0].get("template_id") or "nuclei finding"
+        step = PlanStep(
+            id=f"s{len(plan.steps) + 1}",
+            description=f"Validate Nuclei candidate ({template_id}) at {path}",
+            tool_name="http_get",
+            arguments={"target": target, "path": path},
+        )
+        plan.rationale = f"Nuclei candidate found ({template_id} at {path}); queued validation."
         return self._insert_before_summary(plan, [step])
 
     @staticmethod

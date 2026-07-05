@@ -150,6 +150,17 @@ pre-configured for the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)
 | `HEXAGENT_MODEL` | `openai/gpt-4o-mini` | Model id in `provider/model` format (e.g. `anthropic/claude-sonnet-4.6`). |
 | `HEXAGENT_MOCK_MODE` | `false` | Force offline determinism. |
 | `HEXAGENT_ENABLE_NMAP` | `false` | Register the real `nmap_scan` tool (shells out to a local `nmap` binary) and make the heuristic planner prefer it over mock `port_scan` for the initial scan step. Only enable against explicitly authorised targets. |
+| `HEXAGENT_ENABLE_NUCLEI` | `false` | Register the real `nuclei_scan_url`/`nuclei_scan_urls`/`nuclei_check_installation` tools (shells out to a local `nuclei` binary) and make the heuristic planner queue a safe-default scan once an open web port is found. Named to match `HEXAGENT_ENABLE_NMAP`/`HEXAGENT_ENABLE_PLAYWRIGHT` rather than the `NUCLEI_ENABLED` form some docs use elsewhere. Only enable against explicitly authorised targets. |
+| `NUCLEI_BINARY` | `nuclei` | Binary name/path used by the Nuclei tools. |
+| `NUCLEI_TEMPLATES_DIR` | _empty_ | Directory explicit `templates=[...]` paths must resolve inside; leave empty to disable explicit templates entirely. |
+| `NUCLEI_DEFAULT_TAGS` | `exposure,misconfig,headers,tech,panel,files,tokens` | Safe-default tag profile applied when a call doesn't override `tags`. |
+| `NUCLEI_DEFAULT_SEVERITY` | `info,low,medium` | Safe-default severity profile applied when a call doesn't override `severity`. |
+| `NUCLEI_ALLOW_HIGH` / `NUCLEI_ALLOW_CRITICAL` | `false` | Whether `high`/`critical` severity templates are permitted at all (still gated behind `HEXAGENT_REQUIRE_SENSITIVE_APPROVAL` when enabled). |
+| `NUCLEI_RATE_LIMIT` | `5` | Default requests/sec passed to nuclei; a call requesting a higher rate limit is treated as sensitive. |
+| `NUCLEI_TIMEOUT_SECONDS` | `120` | Overall subprocess timeout per scan. |
+| `NUCLEI_MAX_TARGETS` | `20` | Cap on URLs per `nuclei_scan_urls` batch; the excess is skipped (not silently dropped — see `targets_skipped`) and treated as sensitive. |
+| `NUCLEI_MAX_RESULTS` | `100` | Cap on findings parsed per scan; extra JSONL lines are dropped with a note in `errors`. |
+| `NUCLEI_UPDATE_TEMPLATES` | `false` | Documented for parity with the design brief; HexAgent never updates templates automatically regardless of this flag — run `nuclei -update-templates` yourself. |
 | `HEXAGENT_MAX_ITERATIONS` | `12` | Iteration budget before halting. |
 | `HEXAGENT_REQUIRE_HUMAN_APPROVAL` | `false` | Pause for human review before the report (end-of-run gate). |
 | `HEXAGENT_REQUIRE_SENSITIVE_APPROVAL` | `false` | Pause *before* running any tool marked `sensitive` (`http_post`, `nmap_scan`). Fails closed (denies) if no approval callback is wired. |
@@ -198,6 +209,10 @@ HEXAGENT_ENABLE_NMAP=false uv run hexagent -o "Recon" -t demo.thm.local --mock -
 # Exercise the real nmap tool deterministically (see docs/nmap-testing.md) —
 # --mock here means "no LLM", NOT "no real nmap".
 HEXAGENT_ENABLE_NMAP=true uv run hexagent -o "Map the attack surface" -t 127.0.0.1 --mock --print --no-save
+
+# Add a safe-default Nuclei scan once an open web port is found (see docs/nuclei-testing.md)
+HEXAGENT_ENABLE_NMAP=true HEXAGENT_ENABLE_NUCLEI=true uv run hexagent \
+  -o "Map the attack surface" -t 127.0.0.1 --mock --print --no-save
 
 # Full "educational" run: mock recon + both human checkpoints
 HEXAGENT_ENABLE_NMAP=false uv run hexagent -o "Recon" -t demo.thm.local --mock --human-approval --require-sensitive-approval --print
@@ -268,7 +283,7 @@ Set `HEXAGENT_WEB_PORT=8080 ./run_lab.sh` to expose a different host port.
 > Never pass `--host 0.0.0.0` or otherwise expose it to a network.
 
 The launch form exposes the same knobs as the CLI flags (`--mock`,
-`--enable-nmap`, `--max-iterations`, `--human-approval`,
+`--enable-nmap`, `--enable-nuclei`, `--max-iterations`, `--human-approval`,
 `--require-sensitive-approval`); the live console shows one log line per
 graph node, findings as they're discovered, and the final report rendered as
 formatted HTML (headings, tables, code blocks) with a "view raw markdown"
@@ -305,10 +320,11 @@ directly (driving `.stream()` instead of `.invoke()`) rather than modifying
   the tool is `sensitive` and `HEXAGENT_REQUIRE_SENSITIVE_APPROVAL` is set.
 - **Evaluator** converts the raw `ToolResult` into neutral `Observation`s and
   interpreted `Finding`s, flags items needing human validation, and may request
-  a replan with one of three machine-readable `ReplanReason`s: an open web port
-  was found (→ queue HTTP-layer analysis), robots.txt disallowed a path (→
-  queue a targeted GET), or a login endpoint was discovered (→ queue a
-  controlled POST).
+  a replan with a machine-readable `ReplanReason`: an open web port was found
+  (→ queue HTTP-layer analysis, plus a Nuclei scan if `HEXAGENT_ENABLE_NUCLEI`
+  is set), robots.txt disallowed a path (→ queue a targeted GET), a login
+  endpoint was discovered (→ queue a controlled POST), or a Nuclei candidate
+  was found (→ queue an `http_get` to validate it — see below).
 - **Reporter** renders the final markdown report. The deterministic renderer
   guarantees the required section structure; an LLM, if present, adds an executive
   summary on top.
@@ -321,15 +337,48 @@ A single run against a target with 80/443 open plays out like this:
 port_scan (80, 443 open)
   -> replan: open_web_ports_found
      -> tech_fingerprint, http_header_inspect, security_headers, robots_txt, url_crawler queued
+     -> nuclei_scan_url queued too, if HEXAGENT_ENABLE_NUCLEI=true
 robots_txt (disallows /api/v1/debug)
   -> replan: robots_paths_found -> http_get /api/v1/debug queued
 url_crawler (finds /login)
   -> replan: login_endpoint_found -> http_post /login queued (sensitive; gated on approval if enabled)
+nuclei_scan_url (candidate: exposed-admin-panel at /admin)
+  -> replan: nuclei_candidate_found -> http_get /admin queued to validate
+     -> 200: Finding.validation_status="validated" | 401/403/404: "false_positive" | other: "needs_validation"
 -> summarise
 ```
 
-If the port scan finds no web ports, the HTTP-analysis phase is never queued at
-all — the plan just completes after the scan.
+If the port scan finds no web ports, the HTTP-analysis phase (and Nuclei) is
+never queued at all — the plan just completes after the scan.
+
+### Nuclei: candidate discovery, never auto-confirmed
+
+`nuclei_scan_url`/`nuclei_scan_urls` (`app/tools/nuclei_tool.py`) shell out to a
+local `nuclei` binary the same way `nmap_scan` shells out to `nmap` — off by
+default (`HEXAGENT_ENABLE_NUCLEI=false`), opt-in, `sensitive = True`. Every
+match becomes a `Finding` with `validation_status="candidate"`: the evaluator
+never treats a Nuclei match as confirmed, and the planner's job is to hand the
+matched URL to the *existing* `http_get` tool for confirmation (see the
+decision-logic example above). The final report shows both the candidate and
+its validation outcome, tagged with a `` `CANDIDATE` ``/`` `VALIDATED` ``/
+`` `FALSE_POSITIVE` ``/`` `NEEDS_VALIDATION` `` badge next to the finding title.
+
+A **safe-default profile** (tags `exposure,misconfig,headers,tech,panel,files,
+tokens`; severities `info,low,medium`) runs automatically. Anything that
+escalates beyond it — explicit `templates`, `high`/`critical` severity, a
+raised `rate_limit`, or a `nuclei_scan_urls` batch over `NUCLEI_MAX_TARGETS` —
+is treated as a *sensitive call* via `BaseTool.is_call_sensitive()` (a small
+hook added to the base tool contract so the existing approval gate in
+`app/agents/specialists.py` can be call-aware, reusing
+`HEXAGENT_REQUIRE_SENSITIVE_APPROVAL` rather than adding a second approval
+mechanism) and is denied unless approved. `BLOCKED_TAGS` in `nuclei_tool.py`
+hard-refuses bruteforce/fuzzing/dos/rce/intrusive/destructive/exploit
+templates regardless of approval. See
+[`docs/nuclei-testing.md`](docs/nuclei-testing.md) for the full walkthrough
+(mocked unit tests, direct invocation, the approval gate, and the end-to-end
+candidate → validate flow) and `nuclei -version` / `go install -v
+github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest` for installing the
+binary itself.
 
 The `port_scan` step above is the mock by default; with `HEXAGENT_ENABLE_NMAP=true`
 the planner uses the real `nmap_scan` in its place automatically, so the same
@@ -348,11 +397,14 @@ HEXAGENT_ENABLE_NMAP=true uv run hexagent \
 The architecture is intentionally open for extension without modifying the
 orchestration layer:
 
-- **Add a real tool** (Nuclei, ffuf, SQLMap, Burp): subclass `BaseTool`,
+- **Add a real tool** (ffuf, SQLMap, Burp, ...): subclass `BaseTool`,
   implement `_run`, return a structured `ToolResult`, and register it in
   `default_registry()`. Assign it to `ReconAgent` or `HttpAnalysisAgent` (or add
   a new specialist) via `TOOL_NAMES`; mark it `sensitive = True` if it should be
-  gated behind approval like `nmap_scan`/`http_post`.
+  gated behind approval like `nmap_scan`/`http_post`/`nuclei_scan_url`. See
+  `app/tools/nuclei_tool.py` for a worked example, including
+  `is_call_sensitive()` for approval rules that depend on the call's
+  arguments rather than being static per-tool.
 - **More specialist agents**: `app/agents/specialists.py` already splits recon
   from HTTP analysis — add another `SpecialistAgent` subclass (e.g. an
   `AuthAgent` for authenticated flows) and register it in `ExecutorAgent`.
@@ -385,11 +437,16 @@ This is a proof-of-concept, not a production pentesting tool. Known boundaries:
 
 - **Mock-by-default tooling.** All eight built-in tools return deterministic,
   simulated data derived from a per-target fixture profile — no real HTTP
-  requests, port scans, crawling or fingerprinting occur. `nmap_scan` is the
-  only real, network-touching tool, and it is opt-in (`HEXAGENT_ENABLE_NMAP`),
-  off by default.
+  requests, port scans, crawling or fingerprinting occur. `nmap_scan` and the
+  Nuclei tools (`nuclei_scan_url`/`nuclei_scan_urls`) are the real,
+  network-touching tools, and both are opt-in (`HEXAGENT_ENABLE_NMAP` /
+  `HEXAGENT_ENABLE_NUCLEI`), off by default.
 - **No exploitation capability.** There is no payload delivery, credential
   testing, injection, or post-exploitation logic of any kind — by design.
+  Nuclei's own bruteforce/fuzzing/dos/rce/intrusive/destructive/exploit
+  template tags are hard-blocked (`BLOCKED_TAGS` in `app/tools/nuclei_tool.py`)
+  regardless of approval, and every match is a candidate requiring separate
+  HTTP validation, never an auto-confirmed finding.
 - **No authenticated/session-aware testing.** Tools operate statelessly per
   call; there's no cookie jar, login flow, or multi-step session handling.
 - **Single target, single run.** No multi-host campaigns, asset inventory, or
@@ -423,7 +480,10 @@ This is a proof-of-concept, not a production pentesting tool. Known boundaries:
 ## Further reading
 
 See [`docs/architecture.md`](docs/architecture.md) for a deeper component
-breakdown and design rationale.
+breakdown and design rationale, [`docs/nmap-testing.md`](docs/nmap-testing.md)
+for the real Nmap wrapper, and [`docs/nuclei-testing.md`](docs/nuclei-testing.md)
+for the real Nuclei wrapper (candidate discovery, the approval gate, and the
+candidate → validate → confirm loop).
 
 ## Disclaimer
 

@@ -7,9 +7,10 @@ This document expands on the design summarised in the top-level `README.md`.
 1. **Educational clarity** — the flow (plan → execute → evaluate → replan →
    report) should be easy to read and reason about.
 2. **Safety by construction** — tools are deterministic mocks by default; the
-   one real, network-touching tool (`nmap_scan`) and any state-changing tool
-   (`http_post`) are explicitly marked `sensitive` and opt-in, with no
-   exploitation code anywhere in the POC.
+   real, network-touching tools (`nmap_scan`, `nuclei_scan_url`/
+   `nuclei_scan_urls`) and any state-changing tool (`http_post`) are explicitly
+   marked `sensitive` and opt-in, with no exploitation code anywhere in the
+   POC.
 3. **Extensibility without refactoring** — new tools, agents, prompts and graph
    nodes can be added behind stable interfaces.
 4. **Runs anywhere** — the system is fully functional offline; an LLM is an
@@ -36,11 +37,16 @@ outputs. `Report` is the structured object the reporter renders.
 `BaseTool` (Template Method) handles timing and error-wrapping; subclasses only
 implement `_run`. A `sensitive: bool = False` class attribute marks tools that
 perform a real, state-changing or network-touching action (`http_post`,
-`nmap_scan`) — specialist agents gate these behind approval. `ToolRegistry` is
-a small DI container that also renders a catalogue string for prompts.
-`fixtures.py` derives a coherent, deterministic `SiteProfile` from the target
-host so every mock tool describes the *same* imaginary site — ideal for
-reproducible demos and tests.
+`nmap_scan`, `nuclei_scan_url`/`nuclei_scan_urls`) — specialist agents gate
+these behind approval. `is_call_sensitive(**kwargs)` (default: returns
+`sensitive`) lets a tool make that gate *call-aware* instead of static — the
+Nuclei tools override it so a safe-default call runs unattended while an
+escalated one (custom templates, high/critical severity, a raised rate limit,
+an oversized batch) is gated, without a second approval mechanism.
+`ToolRegistry` is a small DI container that also renders a catalogue string
+for prompts. `fixtures.py` derives a coherent, deterministic `SiteProfile`
+from the target host so every mock tool describes the *same* imaginary site —
+ideal for reproducible demos and tests.
 
 ### Planners (`app/planners`)
 `BasePlanner` defines `create_plan` / `replan(..., last_result=None)`.
@@ -51,16 +57,17 @@ structured data in `last_result`, dispatching on one of three
 
 | Reason | Trigger | Effect |
 |---|---|---|
-| `open_web_ports_found` | port scan reveals 80/443 open | queues `tech_fingerprint`, `http_header_inspect`, `security_headers`, `robots_txt`, `url_crawler` |
+| `open_web_ports_found` | port scan reveals 80/443 open | queues `tech_fingerprint`, `http_header_inspect`, `security_headers`, `robots_txt`, `url_crawler`, and `nuclei_scan_url` if registered |
 | `robots_paths_found` | robots.txt disallows a path | queues a targeted `http_get` on that path |
 | `login_endpoint_found` | crawler finds a URL containing "login" | queues a controlled `http_post` to it |
+| `nuclei_candidate_found` | Nuclei returns a candidate match | queues `http_get` against the matched URL to validate it |
 
 Each handler re-verifies its own trigger condition from `last_result.data`
 (not just the reason code) and is idempotent (checks whether the step it would
 add already exists) — see `_on_open_web_ports` / `_on_robots_paths` /
-`_on_login_endpoint` in `planner.py`. `LLMPlanner` asks a model for structured
-JSON upfront and falls back to (and reuses the `replan` of) the heuristic
-planner. `build_planner` selects the strategy.
+`_on_login_endpoint` / `_on_nuclei_candidate` in `planner.py`. `LLMPlanner`
+asks a model for structured JSON upfront and falls back to (and reuses the
+`replan` of) the heuristic planner. `build_planner` selects the strategy.
 
 ### Agents (`app/agents`)
 Pipeline agents, each LLM-optional with a deterministic fallback:
@@ -79,7 +86,8 @@ registry and are where the sensitive-action gate actually lives:
   `approval_callback` *before* calling the registry. No callback → denied
   (fail-closed), not blocked.
 - **`ReconAgent`** — `port_scan`, `nmap_scan`, `tech_fingerprint`, `robots_txt`,
-  `url_crawler`, `security_headers`.
+  `url_crawler`, `security_headers`, `nuclei_scan_url`, `nuclei_scan_urls`,
+  `nuclei_check_installation`.
 - **`HttpAnalysisAgent`** — `http_get`, `http_post`, `http_header_inspect`.
 
 `ExecutorAgent` holds one instance of each specialist and picks the one whose
