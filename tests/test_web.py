@@ -13,6 +13,7 @@ import time
 import pytest
 
 from app import web as web_module
+from app.models.tool_io import ToolResult
 
 
 @pytest.fixture(autouse=True)
@@ -165,3 +166,23 @@ def test_sensitive_approval_gate_approve_runs_the_action(client):
     assert post_events, session.events
     assert post_events[-1]["status"] == "success"
     assert any(e["type"] == "approval_resolved" and e["approved"] is True for e in session.events)
+
+
+def test_browser_close_event_defaults_to_success_when_tool_succeeded():
+    result = ToolResult.ok("browser_close", "Browser session closed.", {"closed": True})
+    event = web_module._translate_event(
+        "execute",
+        {"tool_results": [result]},
+    )
+
+    assert event["browser_tool"] is True
+    assert event["browser_success"] is True
+
+
+def test_browser_error_event_surfaces_tool_error_message():
+    result = ToolResult.fail("browser_open", "Playwright not installed.")
+    event = web_module._translate_event("execute", {"tool_results": [result]})
+
+    assert event["browser_tool"] is True
+    assert event["browser_success"] is False
+    assert event["browser_errors"] == ["Playwright not installed."]

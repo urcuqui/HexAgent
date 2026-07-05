@@ -135,6 +135,8 @@
     const browserPanel = document.getElementById("browser-panel");
     const browserStatusDot = document.getElementById("browser-status-dot");
     const browserStatusLabel = document.getElementById("browser-status-label");
+    const browserSummaryEl = document.getElementById("browser-summary");
+    const browserErrorsEl = document.getElementById("browser-errors");
     const browserUrlEl = document.getElementById("browser-url");
     const browserApiList = document.getElementById("browser-api-list");
     const screenshotGallery = document.getElementById("screenshot-gallery");
@@ -184,6 +186,23 @@
       const active = event.tool_name !== "browser_close" && event.browser_success !== false;
       if (browserStatusDot) browserStatusDot.classList.toggle("active", active);
       if (browserStatusLabel) browserStatusLabel.textContent = active ? "active" : "closed";
+
+      if (event.tool_name !== "browser_close" && event.summary && browserSummaryEl) {
+        browserSummaryEl.textContent = event.summary;
+      }
+
+      const errors = event.browser_errors || [];
+      if (browserErrorsEl) {
+        if (errors.length) {
+          browserErrorsEl.innerHTML = errors
+            .map((err) => '<div class="browser-error-item">' + escapeHtml(err) + "</div>")
+            .join("");
+          browserErrorsEl.classList.remove("hidden");
+        } else if (event.tool_name !== "browser_close") {
+          browserErrorsEl.innerHTML = "";
+          browserErrorsEl.classList.add("hidden");
+        }
+      }
 
       if (event.current_url && browserUrlEl) {
         browserUrlEl.textContent = event.current_url;

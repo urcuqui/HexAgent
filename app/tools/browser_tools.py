@@ -459,49 +459,96 @@ class BrowserOpenTool(BaseTool):
         if err:
             return ToolResult.fail(self.name, f"Scope violation: {err}")
 
-        page = self._mgr.get_page()
+        # Wrap the entire operational block so no Playwright exception can escape
+        # to BaseTool.run() and produce a ToolResult.fail()/ToolStatus.ERROR result.
+        # All failures surface as ToolResult.ok(success=False) so the graph
+        # continues to browser_analyze_page and browser_close without halting.
         errors: list[str] = []
         status_code: int | None = None
-
-        logger.info("browser_open: navigating to %s", open_url)
-        try:
-            response = page.goto(open_url, wait_until="domcontentloaded")
-            if response:
-                status_code = response.status
-            page.wait_for_load_state("networkidle", timeout=5_000)
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"Navigation: {exc}")
-
-        elements = _extract_page_elements(page)
-        network_reqs = self._mgr.flush_network_events()
-
+        current_url: str = ""
+        page_title: str = ""
+        elements: dict[str, Any] = {
+            "visible_text": "",
+            "links": [],
+            "forms": [],
+            "inputs": [],
+            "buttons": [],
+            "auth_indicators": [],
+            "potential_api_endpoints": [],
+        }
+        network_reqs: list[dict[str, Any]] = []
         screenshot_path: str | None = None
-        if screenshot:
-            slug = _sanitize_filename(open_url.split("//")[-1][:40])
-            screenshot_path = self._mgr.save_screenshot(f"open_{slug}")
+        page = None
 
-        obs = BrowserObservation(
-            success=not errors,
-            action="browser_open",
-            current_url=page.url,
-            title=page.title(),
-            status_code=status_code,
-            visible_text=elements["visible_text"],
-            links=elements["links"][:50],
-            forms=elements["forms"],
-            inputs=elements["inputs"],
-            buttons=elements["buttons"],
-            network_requests=network_reqs[:50],
-            screenshot_path=screenshot_path,
-            auth_indicators=elements["auth_indicators"],
-            potential_api_endpoints=elements["potential_api_endpoints"],
-            errors=errors,
-        )
+        try:
+            page = self._mgr.get_page()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Browser launch failed: {exc}")
+            logger.warning("browser_open: launch error: %s", exc)
+
+        if page is not None:
+            logger.info("browser_open: navigating to %s", open_url)
+            try:
+                response = page.goto(open_url, wait_until="domcontentloaded")
+                if response:
+                    status_code = response.status
+                page.wait_for_load_state("networkidle", timeout=5_000)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Navigation: {exc}")
+
+            try:
+                elements = _extract_page_elements(page)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Page extraction failed: {exc}")
+
+            try:
+                network_reqs = self._mgr.flush_network_events()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Network capture flush failed: {exc}")
+
+            try:
+                current_url = page.url
+                page_title = page.title()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Page state unavailable: {exc}")
+
+            if screenshot:
+                try:
+                    slug = _sanitize_filename(open_url.split("//")[-1][:40])
+                    screenshot_path = self._mgr.save_screenshot(f"open_{slug}")
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"Screenshot failed: {exc}")
+
+        try:
+            obs = BrowserObservation(
+                success=not errors,
+                action="browser_open",
+                current_url=current_url,
+                title=page_title,
+                status_code=status_code,
+                visible_text=elements["visible_text"],
+                links=elements["links"][:50],
+                forms=elements["forms"],
+                inputs=elements["inputs"],
+                buttons=elements["buttons"],
+                network_requests=network_reqs[:50],
+                screenshot_path=screenshot_path,
+                auth_indicators=elements["auth_indicators"],
+                potential_api_endpoints=elements["potential_api_endpoints"],
+                errors=errors,
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Observation build failed: {exc}")
+            obs = BrowserObservation(success=False, action="browser_open", errors=errors)
+
+        final_url = current_url or open_url
         summary = (
-            f"browser_open {open_url} -> {status_code or '?'} | "
+            f"browser_open {final_url} -> {status_code or '?'} | "
             f"title={obs.title!r} | {len(obs.links)} link(s), "
             f"{len(obs.forms)} form(s), {len(obs.potential_api_endpoints)} API hint(s)"
         )
+        if errors:
+            summary += f" | errors: {'; '.join(errors)}"
         logger.info(summary)
         return ToolResult.ok(self.name, summary, obs)
 
@@ -525,24 +572,66 @@ class BrowserAnalyzePageTool(BaseTool):
         if not PLAYWRIGHT_AVAILABLE:
             return ToolResult.fail(self.name, "Playwright not installed.")
         if not self._mgr.active:
-            return ToolResult.fail(
-                self.name, "No active browser session. Call browser_open first."
+            obs = BrowserObservation(
+                success=False,
+                action="browser_analyze_page",
+                errors=["No active browser session. Call browser_open first."],
             )
+            return ToolResult.ok(self.name, "No active browser session to analyze.", obs)
 
-        page = self._mgr.get_page()
-        current_url = page.url
+        errors: list[str] = []
+        page = None
+        current_url = ""
+        title = ""
+        elements: dict[str, Any] = {
+            "visible_text": "",
+            "links": [],
+            "forms": [],
+            "inputs": [],
+            "buttons": [],
+            "auth_indicators": [],
+            "potential_api_endpoints": [],
+        }
+        network_reqs: list[dict[str, Any]] = []
+
+        try:
+            page = self._mgr.get_page()
+            current_url = page.url
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Browser page unavailable: {exc}")
+
+        if not current_url:
+            obs = BrowserObservation(
+                success=False,
+                action="browser_analyze_page",
+                errors=errors or ["Browser page unavailable."],
+            )
+            return ToolResult.ok(self.name, "Browser page unavailable for analysis.", obs)
+
         err = _validate_url(current_url, target)
         if err:
             return ToolResult.fail(self.name, f"Current URL is out-of-scope: {err}")
 
-        elements = _extract_page_elements(page)
-        network_reqs = self._mgr.flush_network_events()
+        try:
+            elements = _extract_page_elements(page)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Page extraction failed: {exc}")
+
+        try:
+            network_reqs = self._mgr.flush_network_events()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Network capture flush failed: {exc}")
+
+        try:
+            title = page.title()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Page title unavailable: {exc}")
 
         obs = BrowserObservation(
-            success=True,
+            success=not errors,
             action="browser_analyze_page",
             current_url=current_url,
-            title=page.title(),
+            title=title,
             visible_text=elements["visible_text"],
             links=elements["links"][:50],
             forms=elements["forms"],
@@ -551,12 +640,15 @@ class BrowserAnalyzePageTool(BaseTool):
             network_requests=network_reqs[:50],
             auth_indicators=elements["auth_indicators"],
             potential_api_endpoints=elements["potential_api_endpoints"],
+            errors=errors,
         )
         summary = (
             f"browser_analyze_page at {current_url} | "
             f"{len(obs.links)} link(s), {len(obs.forms)} form(s), "
             f"{len(obs.auth_indicators)} auth indicator(s)"
         )
+        if errors:
+            summary += f" | errors: {'; '.join(errors)}"
         logger.info(summary)
         return ToolResult.ok(self.name, summary, obs)
 

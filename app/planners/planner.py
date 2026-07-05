@@ -220,28 +220,45 @@ class LLMPlanner(BasePlanner):
         return self._fallback.create_plan(objective, target)
 
     def _inject_browser_phase(self, plan: Plan, target: str) -> Plan:
-        """Append browser phase steps when registered but omitted by the LLM."""
+        """Guarantee the browser phase has exactly open → analyze → close, in order.
+
+        Strategy: strip ALL existing browser-phase steps (however many, in whatever
+        order the LLM put them), then re-insert a canonical set of three steps just
+        before the summary.  This avoids index-corruption bugs from in-place deletion
+        and handles every partial/duplicate LLM output variant.
+        """
         if self._registry.get("browser_open") is None:
             return plan
-        if any(s.tool_name == "browser_open" for s in plan.steps):
-            return plan  # LLM already included them
-        browser_steps = [
+
+        _BROWSER_TOOLS = {"browser_open", "browser_analyze_page", "browser_close"}
+        had_any = any(s.tool_name in _BROWSER_TOOLS for s in plan.steps)
+
+        # Strip all existing browser phase steps (keeps non-browser steps intact).
+        plan.steps = [s for s in plan.steps if s.tool_name not in _BROWSER_TOOLS]
+
+        # Build a clean, ordered set of only the tools that are actually registered.
+        # Use uuid-based IDs so they can never collide with LLM-assigned IDs like "s9".
+        new_steps = [
             PlanStep(
-                id=f"s{len(plan.steps) + i + 1}",
                 description=desc,
                 tool_name=tool,
                 arguments={"target": target},
             )
-            for i, (desc, tool) in enumerate(_BROWSER_PHASE_STEPS)
+            for desc, tool in _BROWSER_PHASE_STEPS
             if self._registry.get(tool) is not None
         ]
-        if not browser_steps:
+        if not new_steps:
             return plan
+
+        action = "replaced" if had_any else "injected"
+        logger.info("Browser phase %s: %s", action, [s.tool_name for s in new_steps])
+        plan.rationale = (plan.rationale or "") + f" [browser phase {action}]"
+        plan = HeuristicPlanner._insert_before_summary(plan, new_steps)
         logger.info(
-            "LLM plan omitted browser phase; injecting %d browser step(s).", len(browser_steps)
+            "Final plan step order: %s",
+            [(s.id, s.tool_name) for s in plan.steps],
         )
-        plan.rationale = (plan.rationale or "") + " [browser phase injected]"
-        return HeuristicPlanner._insert_before_summary(plan, browser_steps)
+        return plan
 
     def replan(
         self,

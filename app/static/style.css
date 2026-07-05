@@ -423,6 +423,28 @@ code.inline-code {
 }
 .browser-status-dot.active { background: #a78bfa; box-shadow: 0 0 6px #7c5abf; }
 
+.browser-summary {
+  font-size: 0.78rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.browser-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.browser-error-item {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.24);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 4px;
+  padding: 0.25rem 0.4rem;
+  word-break: break-word;
+}
+
 .browser-url {
   font-family: var(--mono);
   font-size: 0.75rem;

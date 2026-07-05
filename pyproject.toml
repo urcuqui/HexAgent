@@ -52,8 +52,9 @@ packages = ["app"]
 # hidden .pth files, so the editable-install path entry is never loaded.
 # Copying from cache still produces a hidden file because the destination
 # directory (.venv/lib/…/site-packages) itself carries UF_HIDDEN.
-# The real fix is PYTHONPATH=. in the env-file below, which bypasses .pth
-# entirely. See scripts/hexagent-web.sh and README troubleshooting section.
+# The wrappers run via `python -m app.cli` / `python -m app.web` from the
+# project root, which bypasses editable-install .pth import issues entirely.
+# See scripts/hexagent*.sh and README troubleshooting section.
 link-mode = "copy"
 
 [tool.pytest.ini_options]

@@ -16,6 +16,7 @@ from app.models.plan import ReplanReason
 from app.models.tool_io import ToolStatus
 from app.tools.browser_tools import (
     PLAYWRIGHT_AVAILABLE,
+    BrowserAnalyzePageTool,
     BrowserCloseTool,
     BrowserManager,
     BrowserOpenTool,
@@ -574,12 +575,37 @@ def test_browser_discovered_endpoints_appear_in_observations():
 
 
 def test_browser_tool_failure_returns_error_not_exception():
-    """A browser tool must return ToolResult.fail rather than raise."""
+    """A browser launch crash must return a graceful ok result (success=False), not raise."""
     with patch("app.tools.browser_tools.PLAYWRIGHT_AVAILABLE", True):
         tools = build_browser_tools()
         open_tool = next(t for t in tools if t.name == "browser_open")
-        # Inject a manager whose get_page() raises to simulate a crash.
+        # Inject a manager whose get_page() raises to simulate a Chromium launch crash.
         open_tool._mgr.get_page = MagicMock(side_effect=RuntimeError("browser crash"))
         result = open_tool.run(target="demo.thm.local", url="http://demo.thm.local/")
-    # BaseTool.run() wraps exceptions, so we get an ERROR result not a crash.
-    assert result.status == ToolStatus.ERROR
+    # browser_open now catches the launch error internally so the graph can continue.
+    assert result.status == ToolStatus.SUCCESS
+    assert result.data.get("success") is False
+    assert any("browser crash" in e for e in (result.data.get("errors") or []))
+
+
+def test_browser_analyze_page_failure_returns_success_false_not_error():
+    """A page inspection crash should not surface as ToolStatus.ERROR."""
+    with patch("app.tools.browser_tools.PLAYWRIGHT_AVAILABLE", True):
+        tools = build_browser_tools()
+        analyze_tool: BrowserAnalyzePageTool = next(
+            t for t in tools if t.name == "browser_analyze_page"
+        )
+        analyze_tool._mgr._active = True
+        page = MagicMock()
+        page.url = "http://demo.thm.local/"
+        page.inner_text.return_value = ""
+        page.query_selector_all.return_value = []
+        page.title.side_effect = RuntimeError("title crashed")
+        analyze_tool._mgr.get_page = MagicMock(return_value=page)
+
+        result = analyze_tool.run(target="demo.thm.local")
+
+    assert result.status == ToolStatus.SUCCESS
+    assert result.data.get("success") is False
+    assert result.data.get("current_url") == "http://demo.thm.local/"
+    assert any("title crashed" in e for e in (result.data.get("errors") or []))

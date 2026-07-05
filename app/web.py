@@ -189,7 +189,10 @@ def _translate_event(node_name: str, update: dict[str, Any]) -> dict[str, Any]:
                 event["network_count"] = len(data.get("network_requests") or [])
                 event["api_endpoints"] = (data.get("potential_api_endpoints") or [])[:10]
                 event["auth_indicators"] = data.get("auth_indicators") or []
-                event["browser_success"] = bool(data.get("success", True))
+                event["browser_errors"] = data.get("errors") or ([result.error] if result.error else [])
+                event["browser_success"] = bool(
+                    data.get("success", result.status.value == "success")
+                )
         else:
             history = update.get("reasoning_history") or []
             event["message"] = history[-1] if history else "no runnable step"

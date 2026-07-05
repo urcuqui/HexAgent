@@ -6,10 +6,11 @@
 # ModuleNotFoundError: No module named 'app'.
 #
 # Fix: run via `python -m app.web` from the project root. The -m flag makes
-# Python insert the CWD into sys.path[0] BEFORE site processing runs, so
+# Python insert the CWD into sys.path[0] before site processing runs, so
 # `app` is importable regardless of whether the .pth file was processed.
 # `--directory` ensures CWD = project root no matter where this script is
-# called from.
+# called from. The `web` and `browser` extras are requested explicitly so a
+# clean uv environment has Flask/nh3/Playwright available for the UI.
 #
 # Usage: identical to `uv run hexagent-web`, e.g.:
 #   ./scripts/hexagent-web.sh --port 8080 --debug
@@ -17,4 +18,4 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-exec uv run --directory "$repo_root" python -m app.web "$@"
+exec uv run --directory "$repo_root" --extra web --extra browser python -m app.web "$@"

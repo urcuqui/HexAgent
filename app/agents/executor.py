@@ -51,6 +51,8 @@ class ExecutorAgent:
 
     def select(self, step: PlanStep, target: str, observations: list[str]) -> ToolCall:
         """Decide which tool to run and with what arguments for ``step``."""
+        if step.tool_name and step.tool_name.startswith("browser_"):
+            return self._select_heuristically(step, target)
         if self._llm is not None:
             call = self._select_with_llm(step, target, observations)
             if call is not None:

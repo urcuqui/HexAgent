@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from app.agents.executor import ExecutorAgent
 from app.agents.specialists import HttpAnalysisAgent, ReconAgent
 from app.models.plan import PlanStep
 from app.models.tool_io import ToolCall, ToolStatus
+from app.tools.registry import default_registry
 
 
 def test_recon_and_http_specialists_partition_the_registry(registry):
@@ -71,3 +74,25 @@ def test_executor_dispatches_to_owning_specialist_and_gates_sensitive_tools(regi
     recon_step = PlanStep(id="s2", description="scan", tool_name="port_scan")
     recon_result = executor.execute(recon_step, target="example.com", observations=[])
     assert recon_result.status is ToolStatus.SUCCESS
+
+
+def test_executor_preserves_declared_browser_tool_when_llm_is_enabled():
+    registry = default_registry(enable_playwright=True)
+    executor = ExecutorAgent(registry, llm=object())
+    executor._select_with_llm = MagicMock(
+        return_value=ToolCall(
+            tool_name="browser_analyze_page",
+            arguments={"target": "example.com"},
+        )
+    )
+    step = PlanStep(
+        id="s1",
+        description="open browser",
+        tool_name="browser_open",
+        arguments={"target": "example.com"},
+    )
+
+    call = executor.select(step, target="example.com", observations=[])
+
+    assert call.tool_name == "browser_open"
+    executor._select_with_llm.assert_not_called()
