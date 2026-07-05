@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from app.models.findings import Observation
@@ -18,6 +19,43 @@ class _UnparsableLLM:
             content = "Sure, here is my plan: I will start with {some prose}."
 
         return _Response()
+
+
+class _JSONPlanLLM:
+    """Returns a fixed, valid plan JSON payload -- no port_scan, no nuclei.
+
+    Mirrors what a real LLM planner produced in the field: once it already
+    has a URL, it goes straight to HTTP-layer tools and never queues a
+    port/nmap scan, which is exactly the case that skips the heuristic
+    replan's Nuclei trigger (`_on_open_web_ports`) entirely.
+    """
+
+    def __init__(self, steps):
+        self._steps = steps
+
+    def bind(self, **_kwargs):
+        return self
+
+    def invoke(self, prompt):
+        payload = json.dumps({"rationale": "HTTP-layer recon", "steps": self._steps})
+
+        class _Response:
+            content = payload
+
+        return _Response()
+
+
+_NO_PORT_SCAN_STEPS = [
+    {"id": "s1", "description": "GET root", "tool_name": "http_get", "arguments": {}},
+    {"id": "s2", "description": "Check robots.txt", "tool_name": "robots_txt", "arguments": {}},
+    {
+        "id": "s3",
+        "description": "Summarise",
+        "tool_name": None,
+        "arguments": {},
+        "depends_on": ["s2"],
+    },
+]
 
 
 def test_heuristic_plan_structure(registry):
@@ -37,6 +75,47 @@ def test_heuristic_plan_prefers_nmap_when_registered(registry):
     registry.register(NmapScanTool())
     plan = HeuristicPlanner(registry).create_plan("Recon", "example.com")
     assert plan.steps[0].tool_name == "nmap_scan"
+
+
+def test_llm_planner_injects_nuclei_when_llm_skips_port_scan(registry):
+    # Regression test for a real-world run: an LLM plan that goes straight to
+    # HTTP-layer tools (no port_scan/nmap_scan step at all) must still get a
+    # nuclei_scan_url step when the tool is registered -- otherwise
+    # HEXAGENT_ENABLE_NUCLEI has no effect for LLM-driven plans, since the
+    # heuristic replan trigger (_on_open_web_ports) never fires without a
+    # port-scan result to evaluate.
+    from app.tools.nuclei_tool import NucleiScanUrlTool
+
+    registry.register(NucleiScanUrlTool())
+    planner = LLMPlanner(registry, llm=_JSONPlanLLM(_NO_PORT_SCAN_STEPS))
+    plan = planner.create_plan("Map the attack surface", "example.com")
+
+    assert not any(s.tool_name in ("port_scan", "nmap_scan") for s in plan.steps)
+    nuclei_steps = [s for s in plan.steps if s.tool_name == "nuclei_scan_url"]
+    assert len(nuclei_steps) == 1
+    assert nuclei_steps[0].arguments.get("target") == "example.com"
+    assert "nuclei phase injected" in plan.rationale
+
+
+def test_llm_planner_does_not_duplicate_nuclei_step_llm_already_queued(registry):
+    from app.tools.nuclei_tool import NucleiScanUrlTool
+
+    registry.register(NucleiScanUrlTool())
+    steps_with_nuclei = [
+        *_NO_PORT_SCAN_STEPS[:-1],
+        {"id": "s3", "description": "Scan", "tool_name": "nuclei_scan_url", "arguments": {}},
+        _NO_PORT_SCAN_STEPS[-1],
+    ]
+    planner = LLMPlanner(registry, llm=_JSONPlanLLM(steps_with_nuclei))
+    plan = planner.create_plan("Map the attack surface", "example.com")
+
+    assert sum(1 for s in plan.steps if s.tool_name == "nuclei_scan_url") == 1
+
+
+def test_llm_planner_skips_nuclei_injection_when_not_registered(registry):
+    planner = LLMPlanner(registry, llm=_JSONPlanLLM(_NO_PORT_SCAN_STEPS))
+    plan = planner.create_plan("Map the attack surface", "example.com")
+    assert not any(s.tool_name == "nuclei_scan_url" for s in plan.steps)
 
 
 def test_llm_planner_falls_back_and_logs_raw_output_on_unparsable_response(registry, caplog):

@@ -363,6 +363,17 @@ decision-logic example above). The final report shows both the candidate and
 its validation outcome, tagged with a `` `CANDIDATE` ``/`` `VALIDATED` ``/
 `` `FALSE_POSITIVE` ``/`` `NEEDS_VALIDATION` `` badge next to the finding title.
 
+Getting `nuclei_scan_url` to actually run once enabled is guaranteed for
+**both** planners, not just the heuristic one: the heuristic planner queues it
+from `_on_open_web_ports` (after a `port_scan`/`nmap_scan` result shows an open
+web port), while `LLMPlanner._inject_nuclei_phase` force-injects a single
+`nuclei_scan_url` step before the summary whenever the tool is registered and
+the LLM's own JSON plan didn't already include one — this matters because an
+LLM plan that already has a URL will often skip the port-scan step entirely
+and go straight to HTTP-layer tools, which would otherwise mean the heuristic
+trigger (and therefore Nuclei) never fires at all. Mirrors `_inject_browser_phase`,
+which does the same thing for the Playwright phase.
+
 A **safe-default profile** (tags `exposure,misconfig,headers,tech,panel,files,
 tokens`; severities `info,low,medium`) runs automatically. Anything that
 escalates beyond it — explicit `templates`, `high`/`critical` severity, a

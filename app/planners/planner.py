@@ -269,7 +269,8 @@ class LLMPlanner(BasePlanner):
             data = extract_json(text)
             plan = self._plan_from_dict(objective, target, data)
             if plan.steps:
-                return self._inject_browser_phase(plan, target)
+                plan = self._inject_browser_phase(plan, target)
+                return self._inject_nuclei_phase(plan, target)
         except Exception as exc:  # noqa: BLE001 - fall back gracefully
             logger.warning("LLM planning failed (%s); using heuristic plan", exc)
             if text is not None:
@@ -310,11 +311,32 @@ class LLMPlanner(BasePlanner):
         action = "replaced" if had_any else "injected"
         logger.info("Browser phase %s: %s", action, [s.tool_name for s in new_steps])
         plan.rationale = (plan.rationale or "") + f" [browser phase {action}]"
-        plan = HeuristicPlanner._insert_before_summary(plan, new_steps)
-        logger.info(
-            "Final plan step order: %s",
-            [(s.id, s.tool_name) for s in plan.steps],
+        return HeuristicPlanner._insert_before_summary(plan, new_steps)
+
+    def _inject_nuclei_phase(self, plan: Plan, target: str) -> Plan:
+        """Guarantee a safe-default nuclei_scan_url step runs when registered.
+
+        The LLM plan may skip the initial port-scan step entirely (going
+        straight to HTTP-layer tools once it already has a URL), in which
+        case the heuristic replan trigger for Nuclei
+        (`HeuristicPlanner._on_open_web_ports`, which only fires after
+        evaluating a port_scan/nmap_scan result) never gets a chance to run.
+        Force the step in here instead -- mirrors `_inject_browser_phase` but
+        only needs to guarantee a single step, so no strip-and-rebuild dance.
+        """
+        nuclei_desc, nuclei_tool = _NUCLEI_PHASE_STEP
+        if self._registry.get(nuclei_tool) is None:
+            return plan
+        if any(s.tool_name == nuclei_tool for s in plan.steps):
+            return plan  # LLM already queued it; don't duplicate
+
+        step = PlanStep(
+            description=nuclei_desc, tool_name=nuclei_tool, arguments={"target": target}
         )
+        logger.info("Nuclei phase injected: %s", nuclei_tool)
+        plan.rationale = (plan.rationale or "") + " [nuclei phase injected]"
+        plan = HeuristicPlanner._insert_before_summary(plan, [step])
+        logger.info("Final plan step order: %s", [(s.id, s.tool_name) for s in plan.steps])
         return plan
 
     def replan(
