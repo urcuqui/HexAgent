@@ -175,6 +175,12 @@ def _translate_event(node_name: str, update: dict[str, Any]) -> dict[str, Any]:
                     "duration_ms": result.duration_ms,
                 }
             )
+            # ToolResult.fail() puts the actual reason in .error and leaves
+            # .summary as a generic "<tool> failed" -- surface it here so a
+            # failure (missing binary, blocked tag, out-of-scope target, ...)
+            # is visible in the live log instead of only in server-side logs.
+            if result.error:
+                event["error"] = result.error
             # Attach browser-specific fields when a browser tool ran.
             if result.tool_name.startswith("browser_"):
                 data = result.data or {}

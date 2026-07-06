@@ -83,7 +83,8 @@
           if (event.browser_tool) {
             return describeBrowserExecute(event);
           }
-          return `${event.tool_name} -> ${event.status} — ${event.summary}`;
+          const base = `${event.tool_name} -> ${event.status} — ${event.summary}`;
+          return event.error ? `${base} (${event.error})` : base;
         }
         return event.message || "execute step";
       case "evaluate":

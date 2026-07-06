@@ -157,7 +157,7 @@ pre-configured for the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)
 | `NUCLEI_DEFAULT_SEVERITY` | `info,low,medium` | Safe-default severity profile applied when a call doesn't override `severity`. |
 | `NUCLEI_ALLOW_HIGH` / `NUCLEI_ALLOW_CRITICAL` | `false` | Whether `high`/`critical` severity templates are permitted at all (still gated behind `HEXAGENT_REQUIRE_SENSITIVE_APPROVAL` when enabled). |
 | `NUCLEI_RATE_LIMIT` | `5` | Default requests/sec passed to nuclei; a call requesting a higher rate limit is treated as sensitive. |
-| `NUCLEI_TIMEOUT_SECONDS` | `120` | Overall subprocess timeout per scan. |
+| `NUCLEI_TIMEOUT_SECONDS` | `600` | Overall subprocess timeout per scan. The safe-default profile (7 tags) loads ~3600 templates, clustered to ~1500 requests; at the conservative default `NUCLEI_RATE_LIMIT=5` req/s that's ~5 minutes minimum against a real target, hence the generous default — narrow `tags` for a faster interactive scan instead of lowering this. |
 | `NUCLEI_MAX_TARGETS` | `20` | Cap on URLs per `nuclei_scan_urls` batch; the excess is skipped (not silently dropped — see `targets_skipped`) and treated as sensitive. |
 | `NUCLEI_MAX_RESULTS` | `100` | Cap on findings parsed per scan; extra JSONL lines are dropped with a note in `errors`. |
 | `NUCLEI_UPDATE_TEMPLATES` | `false` | Documented for parity with the design brief; HexAgent never updates templates automatically regardless of this flag — run `nuclei -update-templates` yourself. |

@@ -217,5 +217,5 @@ uv run mypy app/tools/nuclei_tool.py app/models/nuclei.py
 | `Explicit templates require NUCLEI_TEMPLATES_DIR to be configured` | Set `NUCLEI_TEMPLATES_DIR` to a local template directory before passing `templates=[...]` |
 | `Template '...' escapes NUCLEI_TEMPLATES_DIR` | The template path resolved outside the configured directory (path traversal guard) |
 | Result status `skipped` from `ReconAgent`/`ExecutorAgent` | The call was sensitive (escalated) and no approval was granted — this is fail-closed by design |
-| Scan hangs / times out | Lower `NUCLEI_TIMEOUT_SECONDS` or the per-call `timeout`, or narrow `tags`/`severity` |
+| `nuclei scan timed out after Ns` against a real target | Expected for the full safe-default profile: ~3600 templates cluster to ~1500 requests, and at the conservative `NUCLEI_RATE_LIMIT=5` req/s that's ~5 minutes minimum. Raise `NUCLEI_TIMEOUT_SECONDS` (default `600`) rather than lowering `NUCLEI_RATE_LIMIT` (an escalation requiring approval), or narrow `tags` for a faster interactive scan (e.g. `tags=["tech","headers"]`) |
 | `nuclei exited 1: ...` | Read `result.error` — it includes nuclei's own (redacted) stderr |

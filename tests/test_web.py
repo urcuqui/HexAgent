@@ -8,6 +8,8 @@ than consuming a live ``text/event-stream`` response in a test.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import time
 
 import pytest
@@ -99,21 +101,34 @@ def test_nuclei_disabled_by_default_in_web_ui(client):
     assert not any(e.get("tool_name") == "nuclei_scan_url" for e in session.events)
 
 
-def test_enable_nuclei_form_field_registers_and_runs_the_tool(client):
+def test_enable_nuclei_form_field_registers_and_runs_the_tool(client, monkeypatch):
     # Regression test: start_run() must forward enable_nuclei into both
     # Settings and default_registry(), the same way it already does for
     # enable_nmap/enable_playwright -- without that wiring, ticking the
-    # "--enable-nuclei" checkbox in the UI silently had no effect. The nuclei
-    # binary need not be installed here: a missing binary still produces an
-    # "execute" event for nuclei_scan_url (status=error), which is enough to
-    # prove the tool was registered and selected by the planner.
+    # "--enable-nuclei" checkbox in the UI silently had no effect.
+    #
+    # shutil.which is forced to None so this stays hermetic regardless of
+    # whether nuclei happens to be installed on the machine running the
+    # suite: with it actually on PATH, this test previously shelled out for
+    # real against the fake target "demo.thm.local" and hung past
+    # _wait_for_status's timeout waiting on DNS resolution.
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: pytest.fail("must not exec nuclei")
+    )
+
     run_id = _start_mock_run(client, enable_nuclei="on")
     session = _wait_for_status(run_id, {"completed", "error"})
     assert session.status == "completed"
-    ran_nuclei = any(
-        e["type"] == "execute" and e.get("tool_name") == "nuclei_scan_url" for e in session.events
-    )
-    assert ran_nuclei
+    nuclei_events = [e for e in session.events if e.get("tool_name") == "nuclei_scan_url"]
+    assert nuclei_events
+
+    # A missing binary must surface *why* in the live event, not just
+    # "failed" -- this was a real UX gap: only browser tools carried an
+    # `error` field before, so a missing-binary failure was invisible in the
+    # web console and only showed up in server-side logs.
+    assert nuclei_events[0]["status"] == "error"
+    assert nuclei_events[0].get("error")
 
 
 def test_report_html_is_sanitised_against_malicious_objective(client):

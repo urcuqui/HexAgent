@@ -407,7 +407,7 @@ class NucleiScanUrlTool(BaseTool):
         allow_high: bool = False,
         allow_critical: bool = False,
         rate_limit: int = 5,
-        timeout: float = 120.0,
+        timeout: float = 600.0,
         max_results: int = 100,
     ) -> None:
         self.binary = binary
@@ -531,7 +531,7 @@ class NucleiScanUrlsTool(BaseTool):
         allow_high: bool = False,
         allow_critical: bool = False,
         rate_limit: int = 5,
-        timeout: float = 120.0,
+        timeout: float = 600.0,
         max_results: int = 100,
         max_targets: int = 20,
     ) -> None:

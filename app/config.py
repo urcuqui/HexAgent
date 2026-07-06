@@ -63,7 +63,10 @@ class Settings(BaseSettings):
     nuclei_allow_high: bool = Field(default=False, alias="NUCLEI_ALLOW_HIGH")
     nuclei_allow_critical: bool = Field(default=False, alias="NUCLEI_ALLOW_CRITICAL")
     nuclei_rate_limit: int = Field(default=5, alias="NUCLEI_RATE_LIMIT")
-    nuclei_timeout_seconds: int = Field(default=120, alias="NUCLEI_TIMEOUT_SECONDS")
+    # The safe-default profile (7 tags) loads ~3600 templates, clustered to
+    # ~1500 requests; at the conservative default rate-limit of 5 req/s
+    # that's ~5min minimum against a real target, hence the generous default.
+    nuclei_timeout_seconds: int = Field(default=600, alias="NUCLEI_TIMEOUT_SECONDS")
     nuclei_max_targets: int = Field(default=20, alias="NUCLEI_MAX_TARGETS")
     nuclei_max_results: int = Field(default=100, alias="NUCLEI_MAX_RESULTS")
     nuclei_update_templates: bool = Field(default=False, alias="NUCLEI_UPDATE_TEMPLATES")
