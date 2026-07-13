@@ -1,6 +1,6 @@
 # Testing the Nmap Tool
 
-`NmapScanTool` (`app/tools/nmap_tool.py`) is the one tool in HexAgent that is
+`NmapScanTool` (`app/tools/nmap_tool.py`) is the one tool in SerPent-ester that is
 **not** a deterministic mock — it shells out to a real `nmap` binary and scans
 a real host. This guide walks through every level of testing it, from fast
 mocked unit tests to an actual scan against `127.0.0.1`.
@@ -89,7 +89,7 @@ print(result.status, result.error)
 default to keep the main suite offline and deterministic. Opt in explicitly:
 
 ```bash
-HEXAGENT_TEST_REAL_NMAP=1 uv run pytest tests/test_nmap_tool.py -v -k real
+SERPENTESTER_TEST_REAL_NMAP=1 uv run pytest tests/test_nmap_tool.py -v -k real
 ```
 
 This runs an actual `nmap -Pn -sT` scan against `127.0.0.1` on a narrow port
@@ -99,7 +99,7 @@ range and asserts the result is a successful `ToolResult`.
 
 `NmapScanTool` is **not** registered by default — `default_registry()` stays
 fully mock unless you opt in, either via the `enable_nmap` argument or the
-`HEXAGENT_ENABLE_NMAP` setting:
+`SERPENTESTER_ENABLE_NMAP` setting:
 
 ```bash
 uv run python -c "
@@ -118,19 +118,19 @@ print(result.data['open_ports'])
 
 The heuristic (offline) planner's initial scan step prefers the real
 `nmap_scan` over the mock `port_scan` automatically whenever `nmap_scan` is
-registered (`HEXAGENT_ENABLE_NMAP=true`) — see `_SCAN_TOOL_PREFERENCE` in
+registered (`SERPENTESTER_ENABLE_NMAP=true`) — see `_SCAN_TOOL_PREFERENCE` in
 `app/planners/planner.py`. This means a single, ordinary CLI invocation drives
 the *entire* graph (plan → execute → evaluate → replan → report) with a real
 scan, no LLM and no custom scripting required — this is the "prompt directo al
 primer agente" way to test it end to end:
 
 ```bash
-HEXAGENT_ENABLE_NMAP=true uv run hexagent \
+SERPENTESTER_ENABLE_NMAP=true uv run serpentester \
   -o "Map the attack surface" -t 127.0.0.1 --mock --print --no-save
 ```
 
 `--mock` keeps planning/evaluation on the deterministic heuristic path (no LLM
-call), while `HEXAGENT_ENABLE_NMAP=true` still lets the real `nmap_scan` run
+call), while `SERPENTESTER_ENABLE_NMAP=true` still lets the real `nmap_scan` run
 as step 1. Inspect the printed report: `## Executed Steps` shows `nmap_scan`
 first, and if it found 80/443 open, replans queue the HTTP-analysis phase
 exactly as with the mock — except now driven by real scan data instead of the
@@ -143,18 +143,18 @@ the exact same command pauses *before* that first real scan runs:
 
 ```bash
 # Deny it — the scan never runs, the plan still completes.
-echo "n" | HEXAGENT_ENABLE_NMAP=true uv run hexagent \
+echo "n" | SERPENTESTER_ENABLE_NMAP=true uv run serpentester \
   -o "Map the attack surface" -t 127.0.0.1 --mock --require-sensitive-approval --no-save
 
 # Approve it — nmap runs for real.
-echo "y" | HEXAGENT_ENABLE_NMAP=true uv run hexagent \
+echo "y" | SERPENTESTER_ENABLE_NMAP=true uv run serpentester \
   -o "Map the attack surface" -t 127.0.0.1 --mock --require-sensitive-approval --no-save
 ```
 
 Drop the `echo | ` prefix to answer the `Approve this action? [y/N]:` prompt
 interactively in a real terminal.
 
-> If `uv run hexagent` raises `ModuleNotFoundError: No module named 'app'`,
+> If `uv run serpentester` raises `ModuleNotFoundError: No module named 'app'`,
 > see the macOS troubleshooting note in the top-level `README.md` — swap in
 > `uv run python -m app.cli` (same arguments) as a workaround.
 
@@ -221,7 +221,7 @@ print('approved:', approved.execute(step, target='127.0.0.1', observations=[]).s
 
 This no longer needs custom scripting — see **§5, "Use it inside the full
 agent workflow"** above: because the planner prefers `nmap_scan` automatically
-once it's registered, a plain `uv run hexagent ... --mock` (optionally with
+once it's registered, a plain `uv run serpentester ... --mock` (optionally with
 `--require-sensitive-approval`) already drives the entire graph — plan →
 execute → evaluate → replan → report — with the real tool.
 

@@ -20,7 +20,7 @@ load_dotenv()
 
 
 class Settings(BaseSettings):
-    """Validated runtime settings for HexAgent.
+    """Validated runtime settings for SerPent-ester.
 
     Attributes mirror the keys documented in ``.env.example``. When no API key is
     available (or ``mock_mode`` is forced) the agents fall back to deterministic
@@ -43,23 +43,23 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AI_GATEWAY_API_KEY", "OPENAI_API_KEY"),
     )
     openai_base_url: str = Field(default="https://ai-gateway.vercel.sh/v1", alias="OPENAI_BASE_URL")
-    model: str = Field(default="openai/gpt-4o-mini", alias="HEXAGENT_MODEL")
-    temperature: float = Field(default=0.1, alias="HEXAGENT_TEMPERATURE")
-    mock_mode: bool = Field(default=False, alias="HEXAGENT_MOCK_MODE")
+    model: str = Field(default="openai/gpt-4o-mini", alias="SERPENTESTER_MODEL")
+    temperature: float = Field(default=0.1, alias="SERPENTESTER_TEMPERATURE")
+    mock_mode: bool = Field(default=False, alias="SERPENTESTER_MOCK_MODE")
 
     # Real tools (off by default; only use against explicitly authorised targets).
-    enable_nmap: bool = Field(default=False, alias="HEXAGENT_ENABLE_NMAP")
+    enable_nmap: bool = Field(default=False, alias="SERPENTESTER_ENABLE_NMAP")
 
     # Agent behaviour
-    max_iterations: int = Field(default=12, alias="HEXAGENT_MAX_ITERATIONS")
-    require_human_approval: bool = Field(default=False, alias="HEXAGENT_REQUIRE_HUMAN_APPROVAL")
+    max_iterations: int = Field(default=12, alias="SERPENTESTER_MAX_ITERATIONS")
+    require_human_approval: bool = Field(default=False, alias="SERPENTESTER_REQUIRE_HUMAN_APPROVAL")
     require_sensitive_approval: bool = Field(
-        default=False, alias="HEXAGENT_REQUIRE_SENSITIVE_APPROVAL"
+        default=False, alias="SERPENTESTER_REQUIRE_SENSITIVE_APPROVAL"
     )
 
     # Logging / output
-    log_level: str = Field(default="INFO", alias="HEXAGENT_LOG_LEVEL")
-    report_dir: Path = Field(default=Path("reports"), alias="HEXAGENT_REPORT_DIR")
+    log_level: str = Field(default="INFO", alias="SERPENTESTER_LOG_LEVEL")
+    report_dir: Path = Field(default=Path("reports"), alias="SERPENTESTER_REPORT_DIR")
 
     @property
     def use_llm(self) -> bool:

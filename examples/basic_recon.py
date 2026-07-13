@@ -1,4 +1,4 @@
-"""Minimal programmatic example of running the HexAgent workflow.
+"""Minimal programmatic example of running the SerPent-ester workflow.
 
 Run with:
 

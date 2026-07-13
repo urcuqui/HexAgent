@@ -19,7 +19,7 @@ def offline_settings(tmp_path) -> Settings:
     """Deterministic, offline settings writing reports to a temp dir.
 
     ``_env_file=None`` disables loading the developer's local ``.env`` so the
-    suite can't accidentally pick up e.g. ``HEXAGENT_ENABLE_NMAP=true`` and
+    suite can't accidentally pick up e.g. ``SERPENTESTER_ENABLE_NMAP=true`` and
     start running real scans in tests — every field is explicit here.
     """
     return Settings(

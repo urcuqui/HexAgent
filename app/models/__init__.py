@@ -1,4 +1,4 @@
-"""Pydantic data models shared across HexAgent."""
+"""Pydantic data models shared across SerPent-ester."""
 
 from app.models.findings import Finding, Observation, Severity
 from app.models.plan import Plan, PlanStep, StepStatus

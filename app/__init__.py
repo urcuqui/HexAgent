@@ -1,4 +1,4 @@
-"""HexAgent — an educational agentic web-app pentest assistant.
+"""SerPent-ester — an educational agentic web-app pentest assistant.
 
 This package wires together a LangGraph workflow that plans, executes (via mock
 tools), evaluates and reports on reconnaissance-style tasks against a target.

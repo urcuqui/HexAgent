@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# HexAgent lab launcher for a VM/host with Docker available.
+# SerPent-ester lab launcher for a VM/host with Docker available.
 #
 # It creates .env from .env.example when needed, builds the Docker image, and
 # starts the Flask web UI through Docker Compose. The service is exposed on
-# localhost:8000 by default; override with HEXAGENT_WEB_PORT=8080.
+# localhost:8000 by default; override with SERPENTESTER_WEB_PORT=8080.
 #
-# Pass --install to register HexAgent as a systemd service that starts on boot:
+# Pass --install to register SerPent-ester as a systemd service that starts on boot:
 #   sudo ./run_lab.sh --install
 set -euo pipefail
 
 LAB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WEB_PORT="${HEXAGENT_WEB_PORT:-8000}"
+WEB_PORT="${SERPENTESTER_WEB_PORT:-8000}"
 OS_ID="unknown"
 
 # ------------------------------------------------------------------ #
@@ -27,11 +27,11 @@ if [[ "${1:-}" == "--install" ]]; then
         exit 1
     fi
 
-    SERVICE_FILE=/etc/systemd/system/hexagent-lab.service
+    SERVICE_FILE=/etc/systemd/system/serpentester-lab.service
     cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=HexAgent Lab (Docker Compose)
-Documentation=https://github.com/curcuqui/HexAgent
+Description=SerPent-ester Lab (Docker Compose)
+Documentation=https://github.com/curcuqui/SerPent-ester
 After=docker.service network-online.target
 Requires=docker.service
 
@@ -48,22 +48,22 @@ TimeoutStartSec=300
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
-    systemctl enable --now hexagent-lab
-    echo "[*] hexagent-lab service installed and started."
-    echo "[*] HexAgent arrancará automáticamente en cada reinicio."
+    systemctl enable --now serpentester-lab
+    echo "[*] serpentester-lab service installed and started."
+    echo "[*] SerPent-ester arrancará automáticamente en cada reinicio."
     echo "[*] Comandos útiles:"
-    echo "    systemctl status hexagent-lab"
-    echo "    systemctl stop   hexagent-lab"
-    echo "    journalctl -u hexagent-lab -f"
+    echo "    systemctl status serpentester-lab"
+    echo "    systemctl stop   serpentester-lab"
+    echo "    journalctl -u serpentester-lab -f"
     exit 0
 fi
 
 export DOCKER_BUILDKIT=1
-export HEXAGENT_WEB_PORT="$WEB_PORT"
-export HEXAGENT_MOCK_MODE="${HEXAGENT_MOCK_MODE:-true}"
-export HEXAGENT_ENABLE_NMAP="${HEXAGENT_ENABLE_NMAP:-false}"
+export SERPENTESTER_WEB_PORT="$WEB_PORT"
+export SERPENTESTER_MOCK_MODE="${SERPENTESTER_MOCK_MODE:-true}"
+export SERPENTESTER_ENABLE_NMAP="${SERPENTESTER_ENABLE_NMAP:-false}"
 
-echo "[*] Starting HexAgent lab..."
+echo "[*] Starting SerPent-ester lab..."
 
 if [ -r /etc/os-release ]; then
     # shellcheck disable=SC1091
@@ -128,10 +128,10 @@ if [ ! -f "$LAB_DIR/.env" ]; then
     fi
 fi
 
-echo "[*] Building and starting HexAgent containers (app + proxy)..."
+echo "[*] Building and starting SerPent-ester containers (app + proxy)..."
 "${COMPOSE[@]}" up --build -d
 
-echo "[*] Waiting for HexAgent to become reachable on port 80..."
+echo "[*] Waiting for SerPent-ester to become reachable on port 80..."
 HEALTH_OK=0
 for _ in $(seq 1 30); do
     if curl -fsS "http://localhost/health" >/dev/null 2>&1; then
@@ -142,14 +142,14 @@ for _ in $(seq 1 30); do
 done
 
 if [ "$HEALTH_OK" != "1" ]; then
-    echo "[!] HexAgent did not become healthy at http://localhost/health"
+    echo "[!] SerPent-ester did not become healthy at http://localhost/health"
     echo "[!] Inspect logs with: ${COMPOSE[*]} logs"
     exit 1
 fi
 
 VM_IP="$(hostname -I | awk '{print $1}')"
 echo
-echo "[*] HexAgent web UI:  http://${VM_IP}"
+echo "[*] SerPent-ester web UI:  http://${VM_IP}"
 echo "[*] Health endpoint:  http://${VM_IP}/health"
 echo
 "${COMPOSE[@]}" ps

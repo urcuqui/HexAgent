@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 _WEB_PORTS = {80, 443}
 
 # Preferred initial scan tool, in order: use the real nmap when it has been
-# opted into (HEXAGENT_ENABLE_NMAP=true registers it), otherwise the mock.
+# opted into (SERPENTESTER_ENABLE_NMAP=true registers it), otherwise the mock.
 _SCAN_TOOL_PREFERENCE = ("nmap_scan", "port_scan")
 
 # Steps queued once a port scan reveals a listening web service — the
@@ -132,7 +132,7 @@ class HeuristicPlanner(BasePlanner):
             id=f"s{len(plan.steps) + 1}",
             description=f"Submit a controlled POST to {path}",
             tool_name="http_post",
-            arguments={"target": target, "path": path, "data": {"probe": "hexagent"}},
+            arguments={"target": target, "path": path, "data": {"probe": "serpentester"}},
         )
         plan.rationale = f"Login endpoint discovered ({path}); queued a controlled POST."
         return self._insert_before_summary(plan, [step])

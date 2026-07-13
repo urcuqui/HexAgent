@@ -1,4 +1,4 @@
-"""HexAgent web UI: a small Flask front-end over the existing agent graph.
+"""SerPent-ester web UI: a small Flask front-end over the existing agent graph.
 
 This module never touches :func:`app.graph.workflow.run_workflow` (the
 CLI/test entry point). It reuses :func:`build_nodes`/:func:`build_workflow`
@@ -227,7 +227,7 @@ def index() -> str:
 
 @app.get("/health")
 def health():
-    return jsonify({"status": "ok", "service": "hexagent"})
+    return jsonify({"status": "ok", "service": "serpentester"})
 
 
 @app.post("/run")
@@ -340,9 +340,9 @@ def approve(run_id: str):
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the web UI (``hexagent-web``)."""
+    """CLI entry point for the web UI (``serpentester-web``)."""
     parser = argparse.ArgumentParser(
-        prog="hexagent-web", description="HexAgent web UI (local, no auth, lab use only)."
+        prog="serpentester-web", description="SerPent-ester web UI (local, no auth, lab use only)."
     )
     parser.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1).")
     parser.add_argument("--port", type=int, default=5000)
@@ -351,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
 
     configure_logging("INFO")
     logger.warning(
-        "HexAgent web UI has no authentication — bind to 127.0.0.1 only; never expose it "
+        "SerPent-ester web UI has no authentication — bind to 127.0.0.1 only; never expose it "
         "to a network."
     )
     # threaded=True is required: without it the dev server serialises requests,

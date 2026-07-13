@@ -1,4 +1,4 @@
-"""Abstract base class for all HexAgent tools.
+"""Abstract base class for all SerPent-ester tools.
 
 Tools follow a small, uniform contract (Liskov-friendly): subclasses implement
 :meth:`_run` and the base class handles timing, error wrapping and producing a

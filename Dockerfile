@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.9
 #
-# HexAgent container image (educational POC).
+# SerPent-ester container image (educational POC).
 #
 # Multi-stage build:
 #   1. builder  - install all dependencies (incl. dev) using the uv lockfile.
@@ -8,14 +8,14 @@
 #   3. runtime  - lean image with prod-only, non-editable install, non-root user.
 #
 # Build the production image (runs the unit tests as a build gate):
-#   docker build -t hexagent:latest .
+#   docker build -t serpentester:latest .
 # Run only the test stage explicitly:
-#   docker build --target test -t hexagent:test .
+#   docker build --target test -t serpentester:test .
 #
 # The image holds no secrets. Provide the Vercel AI Gateway key at run time:
-#   docker run --rm --env-file .env hexagent:latest -o "Recon" -t demo.thm.local --print
+#   docker run --rm --env-file .env serpentester:latest -o "Recon" -t demo.thm.local --print
 # Or run fully offline (no key needed) using the default mock CMD:
-#   docker run --rm hexagent:latest
+#   docker run --rm serpentester:latest
 
 ARG PYTHON_VERSION=3.12
 
@@ -64,7 +64,7 @@ FROM base AS runtime
 ENV PATH="/app/.venv/bin:$PATH"
 
 # nmap is a system binary, not a Python dependency: NmapScanTool shells out to
-# it (see app/tools/nmap_tool.py). It's only ever *used* if HEXAGENT_ENABLE_NMAP
+# it (see app/tools/nmap_tool.py). It's only ever *used* if SERPENTESTER_ENABLE_NMAP
 # is set to true at `docker run` time (off by default), but the binary must be
 # present in the image for that opt-in to work at all.
 RUN apt-get update \
@@ -83,10 +83,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Gate: force the `test` stage to build (and pass) before the runtime image.
 COPY --from=test /tmp/tests.passed /tmp/tests.passed
 
-RUN useradd --create-home --uid 10001 hexagent \
+RUN useradd --create-home --uid 10001 serpentester \
  && mkdir -p /app/reports \
- && chown -R hexagent:hexagent /app
-USER hexagent
+ && chown -R serpentester:serpentester /app
+USER serpentester
 
-ENTRYPOINT ["hexagent"]
+ENTRYPOINT ["serpentester"]
 CMD ["--objective", "Recon the lab box", "--target", "demo.thm.local", "--mock", "--print"]

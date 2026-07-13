@@ -62,7 +62,7 @@ def build_llm(settings: Settings | None = None) -> ChatOpenAI | None:
     return LLMFactory(settings).build()
 
 
-_JSON_MODE_ATTR = "_hexagent_json_mode_supported"
+_JSON_MODE_ATTR = "_serpentester_json_mode_supported"
 
 
 def invoke_json(llm: Any, prompt: str) -> str:

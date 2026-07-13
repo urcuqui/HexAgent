@@ -2,7 +2,7 @@
 
 All tests mock ``subprocess.run``/``shutil.which`` so the default suite stays
 offline and deterministic. A real scan against 127.0.0.1 is exercised only when
-explicitly opted in via HEXAGENT_TEST_REAL_NMAP=1 and nmap is on PATH.
+explicitly opted in via SERPENTESTER_TEST_REAL_NMAP=1 and nmap is on PATH.
 """
 
 from __future__ import annotations
@@ -189,8 +189,8 @@ def test_timeout_returns_error(monkeypatch):
 
 
 @pytest.mark.skipif(
-    not shutil.which("nmap") or not os.environ.get("HEXAGENT_TEST_REAL_NMAP"),
-    reason="opt-in: set HEXAGENT_TEST_REAL_NMAP=1 with nmap installed to run a real scan",
+    not shutil.which("nmap") or not os.environ.get("SERPENTESTER_TEST_REAL_NMAP"),
+    reason="opt-in: set SERPENTESTER_TEST_REAL_NMAP=1 with nmap installed to run a real scan",
 )
 def test_real_scan_against_localhost():
     result = NmapScanTool(timeout=30).run(target="127.0.0.1", ports="65000-65001")

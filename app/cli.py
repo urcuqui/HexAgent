@@ -1,9 +1,9 @@
-"""HexAgent command-line interface.
+"""SerPent-ester command-line interface.
 
 Run an educational reconnaissance session against a (mock) target and write a
 markdown report. Example:
 
-    uv run hexagent --objective "Recon the lab box" --target demo.thm.local
+    uv run serpentester --objective "Recon the lab box" --target demo.thm.local
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ def _interactive_approval(call: ToolCall) -> bool:
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="hexagent", description="Educational agentic web recon assistant (mock tools)."
+        prog="serpentester", description="Educational agentic web recon assistant (mock tools)."
     )
     parser.add_argument("--objective", "-o", required=True, help="Natural-language goal.")
     parser.add_argument("--target", "-t", required=True, help="Target host or URL (lab only).")
@@ -74,7 +74,7 @@ def _render_summary(state: AgentState) -> None:
             f"[bold]Iterations:[/bold] {state.iterations}  "
             f"[bold]Replans:[/bold] {state.replans}\n"
             f"[bold]Stopped:[/bold] {state.stopped_reason}",
-            title="HexAgent Run",
+            title="SerPent-ester Run",
         )
     )
     if state.findings:

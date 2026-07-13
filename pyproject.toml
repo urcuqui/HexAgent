@@ -1,10 +1,10 @@
 [project]
-name = "hexagent"
+name = "serpentester"
 version = "0.1.0"
 description = "Agentic web application penetration testing assistant (educational POC) built with LangGraph + LangChain."
 readme = "README.md"
 requires-python = ">=3.12"
-authors = [{ name = "HexAgent" }]
+authors = [{ name = "SerPent-ester" }]
 license = { text = "MIT" }
 keywords = ["langgraph", "langchain", "pentest", "agent", "security", "education"]
 
@@ -33,8 +33,8 @@ web = [
 ]
 
 [project.scripts]
-hexagent = "app.cli:main"
-hexagent-web = "app.web:main"
+serpentester = "app.cli:main"
+serpentester-web = "app.web:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -50,7 +50,7 @@ packages = ["app"]
 # Copying from cache still produces a hidden file because the destination
 # directory (.venv/lib/…/site-packages) itself carries UF_HIDDEN.
 # The real fix is PYTHONPATH=. in the env-file below, which bypasses .pth
-# entirely. See scripts/hexagent-web.sh and README troubleshooting section.
+# entirely. See scripts/serpentester-web.sh and README troubleshooting section.
 link-mode = "copy"
 
 [tool.pytest.ini_options]

@@ -2,7 +2,7 @@
 
 Unlike the rest of ``app/tools``, this tool shells out to the locally installed
 ``nmap`` binary and performs an actual TCP scan. It is registered only when
-explicitly enabled (``HEXAGENT_ENABLE_NMAP=true``) so the default registry stays
+explicitly enabled (``SERPENTESTER_ENABLE_NMAP=true``) so the default registry stays
 fully mock/offline. Use only against hosts you are authorised to test.
 """
 

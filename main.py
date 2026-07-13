@@ -1,7 +1,7 @@
-"""Top-level launcher for HexAgent.
+"""Top-level launcher for SerPent-ester.
 
 Delegates to :func:`app.cli.main` so the project can be run either as
-``uv run python main.py ...`` or via the installed ``hexagent`` console script.
+``uv run python main.py ...`` or via the installed ``serpentester`` console script.
 """
 
 from __future__ import annotations

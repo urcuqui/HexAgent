@@ -3,15 +3,15 @@ services:
     build:
       context: .
       target: runtime
-    image: hexagent:lab
-    entrypoint: ["hexagent-web"]
+    image: serpentester:lab
+    entrypoint: ["serpentester-web"]
     command: ["--host", "0.0.0.0", "--port", "5000"]
     env_file:
       - .env
     environment:
-      HEXAGENT_MOCK_MODE: "${HEXAGENT_MOCK_MODE:-true}"
-      HEXAGENT_ENABLE_NMAP: "${HEXAGENT_ENABLE_NMAP:-false}"
-      HEXAGENT_REPORT_DIR: /app/reports
+      SERPENTESTER_MOCK_MODE: "${SERPENTESTER_MOCK_MODE:-true}"
+      SERPENTESTER_ENABLE_NMAP: "${SERPENTESTER_ENABLE_NMAP:-false}"
+      SERPENTESTER_REPORT_DIR: /app/reports
     restart: unless-stopped
     volumes:
       - ./reports:/app/reports

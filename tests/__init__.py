@@ -1,1 +1,1 @@
-"""Test suite for HexAgent."""
+"""Test suite for SerPent-ester."""

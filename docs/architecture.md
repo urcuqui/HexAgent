@@ -1,4 +1,4 @@
-# HexAgent Architecture
+# SerPent-ester Architecture
 
 This document expands on the design summarised in the top-level `README.md`.
 
@@ -118,7 +118,7 @@ the reactive planner's multiple trigger points.
 There is a second, independent human-oversight mechanism that is *not* a graph
 node: the sensitive-action gate inside `SpecialistAgent.run` (see Agents,
 above). It fires *before* a `sensitive` tool call, not at a fixed point in the
-graph, and only when `HEXAGENT_REQUIRE_SENSITIVE_APPROVAL` is set. Because a
+graph, and only when `SERPENTESTER_REQUIRE_SENSITIVE_APPROVAL` is set. Because a
 denied action resolves to a `ToolResult(status=SKIPPED)` rather than raising,
 `Plan.completed_ids()` treats `SKIPPED` (and `FAILED`) the same as `DONE` for
 dependency resolution — otherwise a single denied action would permanently

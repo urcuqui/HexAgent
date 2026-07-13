@@ -1,4 +1,4 @@
-You are the EXECUTOR for HexAgent. Given a single plan step and the catalogue of
+You are the EXECUTOR for SerPent-ester. Given a single plan step and the catalogue of
 available tools, decide which tool to invoke and with what arguments.
 
 Rules:

@@ -1,12 +1,12 @@
-# HexAgent
+# SerPent-ester
 
-**HexAgent** is an educational proof-of-concept that demonstrates how an AI agent
+**SerPent-ester** is an educational proof-of-concept that demonstrates how an AI agent
 can *orchestrate* web-application reconnaissance using
 [LangGraph](https://github.com/langchain-ai/langgraph) and
 [LangChain](https://github.com/langchain-ai/langchain). It plans, selects and runs
 tools, evaluates results, replans when needed, and produces a markdown report.
 
-> ⚠️ **Educational use only.** Every tool is a **deterministic mock** — HexAgent
+> ⚠️ **Educational use only.** Every tool is a **deterministic mock** — SerPent-ester
 > performs **no real network activity and no exploitation**. It is designed as a
 > foundation for learning and for safely extending
 > toward real, *authorised* tooling later. Only ever target systems you own or are
@@ -45,7 +45,7 @@ tools, evaluates results, replans when needed, and produces a markdown report.
 
 ## Architecture
 
-HexAgent is layered so that each concern is independently testable and replaceable:
+SerPent-ester is layered so that each concern is independently testable and replaceable:
 
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
@@ -97,7 +97,7 @@ plus control-flow fields (`iterations`, `needs_replan`, `replans`,
 ## Project structure
 
 ```
-HexAgent/
+SerPent-ester/
 ├── app/
 │   ├── agents/        # planner / executor / evaluator / reporter agents
 │   ├── graph/         # state, nodes, router, compiled workflow
@@ -112,7 +112,7 @@ HexAgent/
 │   ├── web.py         # Flask web UI (optional; `uv sync --extra web`)
 │   └── config.py      # pydantic-settings configuration
 ├── examples/          # runnable programmatic example
-├── scripts/           # dev helper scripts (e.g. hexagent.sh)
+├── scripts/           # dev helper scripts (e.g. serpentester.sh)
 ├── tests/             # pytest suite
 ├── docs/              # architecture notes
 ├── main.py            # thin launcher -> app.cli:main
@@ -138,7 +138,7 @@ Gateway; leave it empty to run fully offline in deterministic mock mode.
 
 ## Configuration
 
-All settings are environment variables (see `.env.example`). HexAgent is
+All settings are environment variables (see `.env.example`). SerPent-ester is
 pre-configured for the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)
 (an OpenAI-compatible endpoint). With **no API key**, it runs in deterministic
 **mock mode**.
@@ -147,14 +147,14 @@ pre-configured for the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)
 |----------|---------|-------------|
 | `AI_GATEWAY_API_KEY` | _empty_ | Vercel AI Gateway key; enables LLM agents when set. `OPENAI_API_KEY` is also accepted. |
 | `OPENAI_BASE_URL` | `https://ai-gateway.vercel.sh/v1` | OpenAI-compatible base URL (override for other hosts). |
-| `HEXAGENT_MODEL` | `openai/gpt-4o-mini` | Model id in `provider/model` format (e.g. `anthropic/claude-sonnet-4.6`). |
-| `HEXAGENT_MOCK_MODE` | `false` | Force offline determinism. |
-| `HEXAGENT_ENABLE_NMAP` | `false` | Register the real `nmap_scan` tool (shells out to a local `nmap` binary) and make the heuristic planner prefer it over mock `port_scan` for the initial scan step. Only enable against explicitly authorised targets. |
-| `HEXAGENT_MAX_ITERATIONS` | `12` | Iteration budget before halting. |
-| `HEXAGENT_REQUIRE_HUMAN_APPROVAL` | `false` | Pause for human review before the report (end-of-run gate). |
-| `HEXAGENT_REQUIRE_SENSITIVE_APPROVAL` | `false` | Pause *before* running any tool marked `sensitive` (`http_post`, `nmap_scan`). Fails closed (denies) if no approval callback is wired. |
-| `HEXAGENT_LOG_LEVEL` | `INFO` | Logging level. |
-| `HEXAGENT_REPORT_DIR` | `reports` | Output directory for reports. |
+| `SERPENTESTER_MODEL` | `openai/gpt-4o-mini` | Model id in `provider/model` format (e.g. `anthropic/claude-sonnet-4.6`). |
+| `SERPENTESTER_MOCK_MODE` | `false` | Force offline determinism. |
+| `SERPENTESTER_ENABLE_NMAP` | `false` | Register the real `nmap_scan` tool (shells out to a local `nmap` binary) and make the heuristic planner prefer it over mock `port_scan` for the initial scan step. Only enable against explicitly authorised targets. |
+| `SERPENTESTER_MAX_ITERATIONS` | `12` | Iteration budget before halting. |
+| `SERPENTESTER_REQUIRE_HUMAN_APPROVAL` | `false` | Pause for human review before the report (end-of-run gate). |
+| `SERPENTESTER_REQUIRE_SENSITIVE_APPROVAL` | `false` | Pause *before* running any tool marked `sensitive` (`http_post`, `nmap_scan`). Fails closed (denies) if no approval callback is wired. |
+| `SERPENTESTER_LOG_LEVEL` | `INFO` | Logging level. |
+| `SERPENTESTER_REPORT_DIR` | `reports` | Output directory for reports. |
 
 ---
 
@@ -162,17 +162,17 @@ pre-configured for the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)
 
 ### CLI
 
-> On macOS, `uv run hexagent` can intermittently fail with
+> On macOS, `uv run serpentester` can intermittently fail with
 > `ModuleNotFoundError: No module named 'app'` (see the troubleshooting note
-> below). If that happens, swap in `./scripts/hexagent.sh` — same arguments,
+> below). If that happens, swap in `./scripts/serpentester.sh` — same arguments,
 > self-healing. Every example below works with either.
 
 ```bash
 # Offline, deterministic run; print the report to stdout
-uv run hexagent --objective "Recon the lab box" --target demo.thm.local --mock --print
+uv run serpentester --objective "Recon the lab box" --target demo.thm.local --mock --print
 
 # Cap iterations and require a human approval checkpoint
-uv run hexagent -o "Map the attack surface" -t example.thm --max-iterations 6 --human-approval
+uv run serpentester -o "Map the attack surface" -t example.thm --max-iterations 6 --human-approval
 ```
 
 #### Flags
@@ -181,29 +181,29 @@ uv run hexagent -o "Map the attack surface" -t example.thm --max-iterations 6 --
 |---|---|---|
 | `--objective` / `-o` | _required_ | Natural-language goal passed to the planner (e.g. `"Map the attack surface"`). |
 | `--target` / `-t` | _required_ | Host or URL to assess. Only ever an authorised lab/test target — see the Disclaimer. |
-| `--mock` | off | Forces `mock_mode=True` for this run regardless of `.env`/API key: no LLM calls, heuristic planner/evaluator only. **Does not disable `nmap_scan`** — if `HEXAGENT_ENABLE_NMAP=true` is set, `--mock` is exactly how you get a real scan with fully deterministic planning/evaluation around it (see `docs/nmap-testing.md`). To guarantee nothing real runs at all, also set `HEXAGENT_ENABLE_NMAP=false`. |
-| `--max-iterations N` | `12` (or `HEXAGENT_MAX_ITERATIONS`) | Caps `execute` steps before the run force-stops with `stopped_reason = "maximum iterations reached"`. Lower it for a quick smoke test or to bound cost/time on an LLM-driven run. |
+| `--mock` | off | Forces `mock_mode=True` for this run regardless of `.env`/API key: no LLM calls, heuristic planner/evaluator only. **Does not disable `nmap_scan`** — if `SERPENTESTER_ENABLE_NMAP=true` is set, `--mock` is exactly how you get a real scan with fully deterministic planning/evaluation around it (see `docs/nmap-testing.md`). To guarantee nothing real runs at all, also set `SERPENTESTER_ENABLE_NMAP=false`. |
+| `--max-iterations N` | `12` (or `SERPENTESTER_MAX_ITERATIONS`) | Caps `execute` steps before the run force-stops with `stopped_reason = "maximum iterations reached"`. Lower it for a quick smoke test or to bound cost/time on an LLM-driven run. |
 | `--human-approval` | off | End-of-run gate: once the plan has nothing left to run, pause at the `human` checkpoint (`stopped_reason = "awaiting human approval"`) before finishing. A report is still generated either way — this only affects whether the run "waits" at the end. |
 | `--require-sensitive-approval` | off | Pre-action gate: before running any tool marked `sensitive` (`http_post`, `nmap_scan`), print the pending call and prompt `Approve this action? [y/N]`. Answering anything but `y`/`yes` — or piping no input at all — skips that action rather than blocking forever. |
-| `--no-save` | off (report *is* saved) | Skip writing the markdown report to `HEXAGENT_REPORT_DIR` (`reports/` by default). Use for throwaway/repeated test runs so `reports/` doesn't fill up. |
+| `--no-save` | off (report *is* saved) | Skip writing the markdown report to `SERPENTESTER_REPORT_DIR` (`reports/` by default). Use for throwaway/repeated test runs so `reports/` doesn't fill up. |
 | `--print` | off | Print the rendered markdown report to stdout. Independent of `--no-save` — combine both to see the report without persisting it anywhere. |
 
 #### Common combinations
 
 ```bash
 # Fast, fully mock, no side effects — good for iterating while developing/demoing.
-# HEXAGENT_ENABLE_NMAP=false is explicit here so this never depends on your .env.
-HEXAGENT_ENABLE_NMAP=false uv run hexagent -o "Recon" -t demo.thm.local --mock --no-save --print
+# SERPENTESTER_ENABLE_NMAP=false is explicit here so this never depends on your .env.
+SERPENTESTER_ENABLE_NMAP=false uv run serpentester -o "Recon" -t demo.thm.local --mock --no-save --print
 
 # Exercise the real nmap tool deterministically (see docs/nmap-testing.md) —
 # --mock here means "no LLM", NOT "no real nmap".
-HEXAGENT_ENABLE_NMAP=true uv run hexagent -o "Map the attack surface" -t 127.0.0.1 --mock --print --no-save
+SERPENTESTER_ENABLE_NMAP=true uv run serpentester -o "Map the attack surface" -t 127.0.0.1 --mock --print --no-save
 
 # Full "educational" run: mock recon + both human checkpoints
-HEXAGENT_ENABLE_NMAP=false uv run hexagent -o "Recon" -t demo.thm.local --mock --human-approval --require-sensitive-approval --print
+SERPENTESTER_ENABLE_NMAP=false uv run serpentester -o "Recon" -t demo.thm.local --mock --human-approval --require-sensitive-approval --print
 ```
 
-> **macOS troubleshooting:** if `uv run hexagent` raises
+> **macOS troubleshooting:** if `uv run serpentester` raises
 > `ModuleNotFoundError: No module named 'app'`, uv's editable-install `.pth`
 > file got written with the macOS hidden flag set, which Python 3.12+'s
 > `site.py` silently skips. `pyproject.toml` pins `[tool.uv] link-mode =
@@ -211,10 +211,10 @@ HEXAGENT_ENABLE_NMAP=false uv run hexagent -o "Recon" -t demo.thm.local --mock -
 > an inode with a cached `.pth` that can carry the flag), but **this has
 > recurred more than once even with that pin** — it is a mitigation, not a
 > full fix. The most reliable option is the bundled wrapper, which clears the
-> flag before every run automatically (same arguments as `uv run hexagent`):
+> flag before every run automatically (same arguments as `uv run serpentester`):
 >
 > ```bash
-> ./scripts/hexagent.sh --objective "Recon the lab box" --target demo.thm.local --mock --print
+> ./scripts/serpentester.sh --objective "Recon the lab box" --target demo.thm.local --mock --print
 > ```
 >
 > Or fix it manually, one-off:
@@ -248,7 +248,7 @@ when `--require-sensitive-approval` pauses before `http_post`/`nmap_scan`.
 
 ```bash
 uv sync --extra web            # installs Flask + markdown/nh3 (kept optional; the CLI stays dependency-light)
-./scripts/hexagent-web.sh      # or: uv run python -m app.web
+./scripts/serpentester-web.sh      # or: uv run python -m app.web
 # then open http://127.0.0.1:5000
 ```
 
@@ -261,7 +261,7 @@ For a VM or host with Docker and Docker Compose:
 # then open http://localhost:8000
 ```
 
-Set `HEXAGENT_WEB_PORT=8080 ./run_lab.sh` to expose a different host port.
+Set `SERPENTESTER_WEB_PORT=8080 ./run_lab.sh` to expose a different host port.
 
 > **No authentication, local only.** This is an educational dev tool, not a
 > hardened service — it binds to `127.0.0.1` by default and has no login.
@@ -302,7 +302,7 @@ directly (driving `.stream()` instead of `.invoke()`) rather than modifying
   dependencies), then dispatches it to whichever specialist owns that tool
   (`ReconAgent` or `HttpAnalysisAgent`). The owning specialist is what actually
   calls the `ToolRegistry` — and gates the call behind human approval first if
-  the tool is `sensitive` and `HEXAGENT_REQUIRE_SENSITIVE_APPROVAL` is set.
+  the tool is `sensitive` and `SERPENTESTER_REQUIRE_SENSITIVE_APPROVAL` is set.
 - **Evaluator** converts the raw `ToolResult` into neutral `Observation`s and
   interpreted `Finding`s, flags items needing human validation, and may request
   a replan with one of three machine-readable `ReplanReason`s: an open web port
@@ -331,13 +331,13 @@ url_crawler (finds /login)
 If the port scan finds no web ports, the HTTP-analysis phase is never queued at
 all — the plan just completes after the scan.
 
-The `port_scan` step above is the mock by default; with `HEXAGENT_ENABLE_NMAP=true`
+The `port_scan` step above is the mock by default; with `SERPENTESTER_ENABLE_NMAP=true`
 the planner uses the real `nmap_scan` in its place automatically, so the same
 decision logic runs end to end from a single CLI prompt against a real host
 (see [`docs/nmap-testing.md`](docs/nmap-testing.md)):
 
 ```bash
-HEXAGENT_ENABLE_NMAP=true uv run hexagent \
+SERPENTESTER_ENABLE_NMAP=true uv run serpentester \
   -o "Map the attack surface" -t 127.0.0.1 --mock --require-sensitive-approval --print
 ```
 
@@ -386,7 +386,7 @@ This is a proof-of-concept, not a production pentesting tool. Known boundaries:
 - **Mock-by-default tooling.** All eight built-in tools return deterministic,
   simulated data derived from a per-target fixture profile — no real HTTP
   requests, port scans, crawling or fingerprinting occur. `nmap_scan` is the
-  only real, network-touching tool, and it is opt-in (`HEXAGENT_ENABLE_NMAP`),
+  only real, network-touching tool, and it is opt-in (`SERPENTESTER_ENABLE_NMAP`),
   off by default.
 - **No exploitation capability.** There is no payload delivery, credential
   testing, injection, or post-exploitation logic of any kind — by design.

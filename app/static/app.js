@@ -1,4 +1,4 @@
-// HexAgent web UI: launch form (index.html) + live run console (run.html).
+// SerPent-ester web UI: launch form (index.html) + live run console (run.html).
 (function () {
   "use strict";
 
