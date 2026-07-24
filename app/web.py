@@ -44,6 +44,10 @@ RUNS: dict[str, RunSession] = {}
 
 _HEARTBEAT_SECONDS = 1.0
 _MAX_IDLE_SECONDS = 300.0
+# Emitted into session.events while a run is active so a single tool call that
+# blocks longer than _MAX_IDLE_SECONDS (e.g. a real Nuclei scan) still produces
+# new SSE events and never trips the idle-timeout below.
+_PROGRESS_HEARTBEAT_SECONDS = 20.0
 
 # The report is built from `Report` model fields, but `objective`/`target` and
 # tool arguments flow into it verbatim from user input — so its rendered HTML
@@ -103,6 +107,10 @@ class RunSession:
     approval_decision: bool | None = None
     final_markdown: str | None = None
     error: str | None = None
+    # SSE idle-timeout for this run. Widened at creation time when a tool with
+    # a longer worst-case timeout (e.g. Nuclei) is enabled, so a genuinely slow
+    # single tool call doesn't outlive the stream's idle window.
+    idle_timeout_seconds: float = _MAX_IDLE_SECONDS
 
     def __post_init__(self) -> None:
         self.cv = threading.Condition(self.lock)
@@ -148,6 +156,19 @@ def _make_approval_callback(session: RunSession) -> ApprovalCallback:
         return decision
 
     return _callback
+
+
+def _heartbeat_ticker(session: RunSession, stop: threading.Event) -> None:
+    """Emit a keep-alive event every _PROGRESS_HEARTBEAT_SECONDS while the run
+    is active, so a long blocking tool call (real Nuclei/Nmap scan) still
+    produces SSE traffic instead of sitting silent until it returns.
+    """
+    while not stop.wait(_PROGRESS_HEARTBEAT_SECONDS):
+        with session.lock:
+            status = session.status
+        if status not in ("running", "awaiting_approval"):
+            break
+        _emit(session, {"type": "heartbeat"})
 
 
 def _translate_event(node_name: str, update: dict[str, Any]) -> dict[str, Any]:
@@ -223,6 +244,11 @@ def _translate_event(node_name: str, update: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_graph(session: RunSession, graph: Any, initial_state: AgentState, config: dict) -> None:
+    stop_heartbeat = threading.Event()
+    ticker = threading.Thread(
+        target=_heartbeat_ticker, args=(session, stop_heartbeat), daemon=True
+    )
+    ticker.start()
     try:
         _emit(
             session,
@@ -243,6 +269,8 @@ def _run_graph(session: RunSession, graph: Any, initial_state: AgentState, confi
             session.status = "error"
             session.error = str(exc)
         _emit(session, {"type": "error", "message": str(exc)})
+    finally:
+        stop_heartbeat.set()
 
 
 @app.get("/")
@@ -283,6 +311,14 @@ def start_run():
     )
 
     session = RunSession(run_id=uuid.uuid4().hex)
+    if settings.enable_nuclei:
+        # A safe-default Nuclei scan can legitimately run for the full
+        # configured timeout (default 600s) with no intermediate tool_result
+        # events; give the stream enough idle headroom to outlast it even if
+        # the heartbeat ticker below were ever disabled.
+        session.idle_timeout_seconds = max(
+            _MAX_IDLE_SECONDS, settings.nuclei_timeout_seconds + 60.0
+        )
     RUNS[session.run_id] = session
 
     registry = default_registry(
@@ -333,7 +369,8 @@ def events(run_id: str):
 
     def _stream():
         idx = 0
-        deadline = time.monotonic() + _MAX_IDLE_SECONDS
+        idle_timeout = session.idle_timeout_seconds
+        deadline = time.monotonic() + idle_timeout
         while True:
             with session.lock:
                 while idx == len(session.events) and session.status in (
@@ -348,7 +385,7 @@ def events(run_id: str):
                 terminal = session.status in ("completed", "error") and idx == len(session.events)
 
             for event in new_events:
-                deadline = time.monotonic() + _MAX_IDLE_SECONDS
+                deadline = time.monotonic() + idle_timeout
                 yield f"data: {json.dumps(event, default=str)}\n\n"
 
             if terminal:

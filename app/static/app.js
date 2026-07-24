@@ -105,6 +105,8 @@
         return `error: ${event.message}`;
       case "timeout":
         return "stream idle timeout — reconnect if the run is still active";
+      case "heartbeat":
+        return "… still running";
       default:
         return JSON.stringify(event);
     }

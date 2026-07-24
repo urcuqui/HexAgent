@@ -215,6 +215,7 @@ input[type="number"]:focus {
 .log-line.type-done, .log-line.type-report { color: var(--green); }
 .log-line.type-approval_requested { color: var(--yellow); }
 .log-line.type-approval_resolved { color: var(--yellow); }
+.log-line.type-heartbeat, .log-line.type-timeout { color: var(--text-dim); }
 
 .side-panel { display: flex; flex-direction: column; gap: 1rem; }
 
