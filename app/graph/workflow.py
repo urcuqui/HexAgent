@@ -48,14 +48,14 @@ def build_workflow(nodes: WorkflowNodes):
     graph.add_edge(START, "intake")
     graph.add_edge("intake", "plan") # planner agent
     graph.add_edge("plan", "execute") # executor agent
-    graph.add_edge("execute", "evaluate") 
+    graph.add_edge("execute", "evaluate") # evaluator agent
     graph.add_conditional_edges(
         "evaluate",
         route_after_evaluate,
         {EXECUTE: "execute", REPLAN: "replan", HUMAN: "human", REPORT: "report"},
     )
     graph.add_edge("replan", "execute")
-    graph.add_edge("human", "report")
+    graph.add_edge("human", "report") # reporter agent
     graph.add_edge("report", END)
 
     return graph.compile()
